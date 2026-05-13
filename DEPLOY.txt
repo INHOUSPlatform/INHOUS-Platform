@@ -1,0 +1,141 @@
+INHOUS Platform — Railway Deployment Guide
+==========================================
+
+This folder contains everything needed to deploy the INHOUS platform
+to Railway. Follow these steps exactly and you will have a live URL
+to test within about 10 minutes.
+
+WHAT YOU NEED
+-------------
+- A GitHub account (free) — github.com
+- A Railway account (free) — railway.app
+- These files (this folder)
+
+
+STEP 1 — Create a GitHub account
+---------------------------------
+If you already have one, skip to Step 2.
+
+1. Go to github.com
+2. Click "Sign up"
+3. Use your email, create a password, follow the steps
+4. Verify your email address
+
+
+STEP 2 — Create a new GitHub repository
+-----------------------------------------
+1. Log into github.com
+2. Click the green "New" button (top left, next to "Repositories")
+3. Name it: inhous-platform
+4. Leave everything else as default
+5. Click "Create repository"
+6. You will see a page with your empty repository
+
+
+STEP 3 — Upload these files to GitHub
+---------------------------------------
+1. On your new repository page, click "uploading an existing file"
+   (it's a link in the text that says "or importing code")
+2. Drag ALL the files from this folder into the upload area:
+   - app.py
+   - auth.py
+   - database.py
+   - main.py
+   - index.html
+   - requirements.txt
+   - railway.json
+   - nixpacks.toml
+   - Procfile
+   - .gitignore
+3. Scroll down, click "Commit changes"
+4. Your files are now on GitHub
+
+
+STEP 4 — Create a Railway account
+-----------------------------------
+1. Go to railway.app
+2. Click "Login" then "Login with GitHub"
+3. Authorise Railway to access your GitHub account
+4. Complete the setup (takes 30 seconds)
+
+
+STEP 5 — Deploy to Railway
+----------------------------
+1. On Railway, click "New Project"
+2. Click "Deploy from GitHub repo"
+3. Find and click "inhous-platform"
+4. Railway will automatically detect Python and start building
+5. Wait about 2-3 minutes for the build to complete
+6. You will see a green "Active" status when it's done
+
+
+STEP 6 — Get your live URL
+----------------------------
+1. Click on your deployment in Railway
+2. Click "Settings" tab
+3. Under "Domains", click "Generate Domain"
+4. Railway gives you a URL like: inhous-platform-production.up.railway.app
+5. Open that URL in your browser
+6. You should see the INHOUS login screen
+
+
+STEP 7 — Load demo data and log in
+------------------------------------
+1. On the login screen, click "Load demo data (first time setup)"
+   This creates the 32 Mapesbury Road demo property and test accounts
+2. Log in with:
+   - Email:    david@inhous.com
+   - Password: inhous2026
+3. You are now in the platform as the INHOUS broker
+
+Also available:
+   - Vendor login: james.kermisch@email.com / vendor2026
+
+
+WHAT TO TEST
+------------
+Once logged in, try these in order:
+
+1. Dashboard — check the property summary loads
+2. Photography — the vendor can select preferred dates here
+3. Viewings — click "Book viewing", pick a date, see available slots
+4. Viewings — try booking a slot to see instant-book confirmation
+5. Offers — click "Log offer", fill in buyer details, submit
+6. Offers — accept the offer and see the auto-trigger notifications
+7. AML/KYC — add a record and certify it
+8. Documents — upload a test file
+9. Admin — create a new user or send an invite link
+10. Sign out, log back in as the vendor to see restricted view
+
+ADDING YOUR SOLICITOR OR A TEST AGENT
+---------------------------------------
+1. Log in as broker (david@inhous.com)
+2. Go to Admin
+3. Use "Send invite link" — select the property, enter an email and role
+4. Copy the invite URL shown
+5. Open it in a different browser or incognito window
+6. That person creates their account and lands on their dashboard
+7. As an agent, they will only see their own activity
+
+COSTS
+------
+Railway's free tier gives you $5 of usage per month which is enough
+for testing. The platform will sleep after inactivity on the free tier
+(first load may take 10-15 seconds to wake up). When you are ready to
+go live properly, the $20/month Hobby plan keeps it always on.
+
+IF SOMETHING GOES WRONG
+------------------------
+- Check the Railway deployment logs (click your deployment, then "Logs")
+- Common issue: if the build fails, check all files were uploaded
+- The health check URL is: your-url.railway.app/api/health
+  It should return: {"platform":"INHOUS","status":"ok","version":"1.0.0"}
+
+WHEN YOU ARE READY FOR production.inhous.com
+---------------------------------------------
+Once you have tested on Railway and are happy, a developer can take
+these same files and deploy them to your own server at
+platform.inhous.com in about an hour. The Railway deployment is
+purely for testing — the code is identical either way.
+
+INHOUS Limited · platform.inhous.com

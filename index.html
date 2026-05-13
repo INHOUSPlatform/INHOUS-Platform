@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INHOUS Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  :root {
+    --gold: #C9A96E; --dark: #1E2228; --navy: #303A48; --white: #FFFFFF;
+    --cream: #F5F2EE; --light: #F9F7F5; --mid: #9A9690; --border: #E8E4DE;
+    --purple: #534AB7; --purple-light: #EEEDFE; --green: #1D9E75;
+    --green-light: #EAF3DE; --amber: #BA7517; --amber-light: #FAEEDA;
+    --red: #E24B4A; --red-light: #FCEBEB; --blue: #185FA5; --blue-light: #E6F1FB;
+    --radius: 10px; --radius-sm: 6px; --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: var(--cream); color: var(--dark); font-size: 14px; min-height: 100vh; }
+  h1,h2,h3 { font-family: 'Cormorant Garamond', serif; font-weight: 500; }
+  input,select,textarea { font-family: 'Inter', sans-serif; font-size: 13px; }
+  button { font-family: 'Inter', sans-serif; cursor: pointer; }
+  .btn { padding: 8px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; border: 1px solid var(--border); background: var(--white); color: var(--dark); transition: all .15s; }
+  .btn:hover { background: var(--light); }
+  .btn-primary { background: var(--purple); color: #EEEDFE; border-color: var(--purple); }
+  .btn-primary:hover { background: #3C3489; }
+  .btn-gold { background: var(--gold); color: var(--dark); border-color: var(--gold); }
+  .btn-green { background: var(--green-light); color: #27500A; border-color: #C0DD97; }
+  .btn-danger { background: var(--red-light); color: #791F1F; border-color: #F7C1C1; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .badge { font-size: 11px; padding: 3px 8px; border-radius: 20px; font-weight: 500; white-space: nowrap; display: inline-block; }
+  .badge-green { background: var(--green-light); color: #27500A; }
+  .badge-amber { background: var(--amber-light); color: #633806; }
+  .badge-purple { background: var(--purple-light); color: #3C3489; }
+  .badge-blue { background: var(--blue-light); color: #0C447C; }
+  .badge-gray { background: var(--light); color: var(--mid); border: 1px solid var(--border); }
+  .badge-red { background: var(--red-light); color: #791F1F; }
+  .card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 500; color: var(--mid); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 13px; background: var(--white); color: var(--dark); transition: border-color .15s;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--purple); }
+  .field textarea { resize: vertical; min-height: 80px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .info-box { padding: 12px 14px; border-radius: var(--radius-sm); margin-bottom: 14px; border-left: 3px solid; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+  .info-purple { background: var(--purple-light); border-color: var(--purple); color: #3C3489; }
+  .info-green { background: var(--green-light); border-color: var(--green); color: #27500A; }
+  .info-amber { background: var(--amber-light); border-color: var(--amber); color: #633806; }
+  .info-red { background: var(--red-light); border-color: var(--red); color: #791F1F; }
+  .info-label { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
+  .info-text { font-size: 12px; line-height: 1.6; }
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .stat { background: var(--light); border-radius: var(--radius-sm); padding: 12px; text-align: center; border: 1px solid var(--border); }
+  .stat-val { font-size: 22px; font-weight: 600; color: var(--dark); font-family: 'Cormorant Garamond', serif; }
+  .stat-lbl { font-size: 11px; color: var(--mid); margin-top: 2px; }
+  .table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .table th { padding: 9px 12px; text-align: left; background: var(--dark); color: var(--white); font-weight: 500; font-size: 12px; }
+  .table td { padding: 9px 12px; border-bottom: 1px solid var(--border); }
+  .table tr:last-child td { border-bottom: none; }
+  .table tr:hover td { background: var(--light); }
+  .error-text { color: var(--red); font-size: 12px; margin-top: 6px; }
+  .success-text { color: var(--green); font-size: 12px; margin-top: 6px; }
+  .loading { display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--mid); font-size: 13px; }
+  .empty { text-align: center; padding: 40px; color: var(--mid); }
+  .empty-icon { font-size: 32px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:5001/api'
+  : window.location.origin + '/api';
+
+// ── API HELPERS ───────────────────────────────────────────────────────────────
+async function api(method, path, body = null, token = null) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(API + path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+// ── CONTEXT ───────────────────────────────────────────────────────────────────
+const AuthContext = React.createContext(null);
+
+function AuthProvider({ children }) {
+  const [user, setUser] = React.useState(null);
+  const [token, setToken] = React.useState(() => localStorage.getItem('inhous_token'));
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    if (token) {
+      api('GET', '/auth/me', null, token)
+        .then(u => setUser(u))
+        .catch(() => { localStorage.removeItem('inhous_token'); setToken(null); })
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
+  }, [token]);
+
+  const login = async (email, password) => {
+    const data = await api('POST', '/auth/login', { email, password });
+    localStorage.setItem('inhous_token', data.token);
+    setToken(data.token);
+    setUser(data.user);
+    return data.user;
+  };
+
+  const logout = () => {
+    localStorage.removeItem('inhous_token');
+    setToken(null);
+    setUser(null);
+  };
+
+  const authApi = (method, path, body = null) => api(method, path, body, token);
+
+  return (
+    <AuthContext.Provider value={{ user, token, login, logout, authApi, loading }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+const useAuth = () => React.useContext(AuthContext);
+
+// ── COMPONENTS ────────────────────────────────────────────────────────────────
+
+function Spinner() {
+  return <div className="loading"><span style={{marginRight:8}}>⟳</span> Loading…</div>;
+}
+
+function Badge({ status }) {
+  const map = {
+    confirmed: ['badge-green', 'Confirmed'],
+    instant: ['badge-green', 'Instant book'],
+    completed: ['badge-green', 'Completed'],
+    certified: ['badge-green', 'Certified'],
+    accepted: ['badge-green', 'Accepted'],
+    active: ['badge-green', 'Active'],
+    pending: ['badge-amber', 'Pending'],
+    date_selected: ['badge-amber', 'Date selected'],
+    photography_pending: ['badge-amber', 'Photography pending'],
+    photography_booked: ['badge-amber', 'Photography booked'],
+    under_review: ['badge-purple', 'Under review'],
+    countered: ['badge-purple', 'Countered'],
+    under_offer: ['badge-purple', 'Under offer'],
+    managed: ['badge-blue', 'Managed sale'],
+    direct: ['badge-blue', 'Direct sale'],
+    onboarding: ['badge-gray', 'Onboarding'],
+    declined: ['badge-red', 'Declined'],
+    cancelled_agent: ['badge-red', 'Cancelled'],
+    withdrawn: ['badge-red', 'Withdrawn'],
+    no_show: ['badge-red', 'No show'],
+    submitted: ['badge-purple', 'Submitted'],
+  };
+  const [cls, label] = map[status] || ['badge-gray', status || '—'];
+  return <span className={`badge ${cls}`}>{label}</span>;
+}
+
+function PageHeader({ title, subtitle, actions }) {
+  return (
+    <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:20}}>
+      <div>
+        <h2 style={{fontSize:26,color:'var(--dark)',fontFamily:"'Cormorant Garamond', serif",fontWeight:500}}>{title}</h2>
+        {subtitle && <div style={{fontSize:12,color:'var(--mid)',marginTop:3}}>{subtitle}</div>}
+      </div>
+      {actions && <div style={{display:'flex',gap:8,alignItems:'center'}}>{actions}</div>}
+    </div>
+  );
+}
+
+function InfoBox({ type = 'purple', label, children }) {
+  return (
+    <div className={`info-box info-${type}`}>
+      {label && <div className="info-label">{label}</div>}
+      <div className="info-text">{children}</div>
+    </div>
+  );
+}
+
+// ── VIEWS ─────────────────────────────────────────────────────────────────────
+
+function LoginView() {
+  const { login } = useAuth();
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [error, setError] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  const [seeded, setSeeded] = React.useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await login(email, password);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const seedData = async () => {
+    try {
+      const res = await api('POST', '/seed');
+      setSeeded(true);
+      setEmail('david@inhous.com');
+      setPassword('inhous2026');
+      console.log('Seeded:', res);
+    } catch (e) {
+      setSeeded(true); // already seeded
+      setEmail('david@inhous.com');
+      setPassword('inhous2026');
+    }
+  };
+
+  return (
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--cream)'}}>
+      <div style={{width:'100%',maxWidth:380}}>
+        <div style={{textAlign:'center',marginBottom:32}}>
+          <div style={{fontSize:32,fontFamily:"'Cormorant Garamond', serif",fontWeight:600,color:'var(--gold)',letterSpacing:'0.1em',marginBottom:6}}>INHOUS</div>
+          <div style={{fontSize:13,color:'var(--mid)'}}>Property Transaction Platform</div>
+        </div>
+        <div className="card">
+          <form onSubmit={handleSubmit}>
+            <div className="field">
+              <label>Email address</label>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="your@email.com" required />
+            </div>
+            <div className="field">
+              <label>Password</label>
+              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" required />
+            </div>
+            {error && <div className="error-text" style={{marginBottom:10}}>{error}</div>}
+            <button type="submit" className="btn btn-primary" style={{width:'100%'}} disabled={loading}>
+              {loading ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+          <div style={{marginTop:16,paddingTop:16,borderTop:'1px solid var(--border)',textAlign:'center'}}>
+            {!seeded ? (
+              <button className="btn btn-sm" onClick={seedData} style={{color:'var(--mid)',fontSize:12}}>
+                Load demo data (first time setup)
+              </button>
+            ) : (
+              <div className="success-text">Demo data loaded — credentials pre-filled above ↑</div>
+            )}
+          </div>
+        </div>
+        <div style={{textAlign:'center',marginTop:16,fontSize:11,color:'var(--mid)'}}>
+          INHOUS Limited · platform.inhous.com · Confidential
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DashboardLayout({ children, currentPage, setPage }) {
+  const { user, logout } = useAuth();
+  const [notifCount, setNotifCount] = React.useState(0);
+  const { authApi } = useAuth();
+
+  React.useEffect(() => {
+    authApi('GET', '/notifications').then(n => setNotifCount(n.filter(x=>!x.is_read).length)).catch(()=>{});
+  }, []);
+
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', roles: ['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
+    { id: 'properties', label: 'Properties', roles: ['broker'] },
+    { id: 'viewings', label: 'Viewings', roles: ['broker','vendor','agent'] },
+    { id: 'feedback', label: 'Feedback', roles: ['broker','vendor','agent'] },
+    { id: 'offers', label: 'Offers', roles: ['broker','vendor','agent'] },
+    { id: 'documents', label: 'Documents', roles: ['broker','vendor','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
+    { id: 'aml', label: 'AML / KYC', roles: ['broker','vendor_solicitor','buyer_solicitor','agent'] },
+    { id: 'photography', label: 'Photography', roles: ['broker','vendor'] },
+    { id: 'notifications', label: `Notifications${notifCount > 0 ? ` (${notifCount})` : ''}`, roles: ['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
+    { id: 'admin', label: 'Admin', roles: ['broker'] },
+  ];
+
+  const visible = navItems.filter(n => n.roles.includes(user?.role));
+
+  const roleLabel = {
+    broker: 'INHOUS Broker', vendor: 'Vendor', agent: 'Agent',
+    vendor_solicitor: 'Vendor Solicitor', buyer_solicitor: 'Buyer Solicitor',
+    buyer: 'Buyer', family_office: 'Family Office'
+  };
+
+  return (
+    <div style={{display:'flex',minHeight:'100vh'}}>
+      {/* Sidebar */}
+      <div style={{width:220,flexShrink:0,background:'var(--dark)',display:'flex',flexDirection:'column',position:'fixed',top:0,bottom:0,left:0,zIndex:100}}>
+        <div style={{padding:'20px 20px 16px',borderBottom:'1px solid rgba(255,255,255,0.08)'}}>
+          <div style={{fontSize:22,fontFamily:"'Cormorant Garamond', serif",fontWeight:600,color:'var(--gold)',letterSpacing:'0.08em'}}>INHOUS</div>
+          <div style={{fontSize:11,color:'rgba(255,255,255,0.4)',marginTop:2}}>Property Platform</div>
+        </div>
+        <nav style={{flex:1,padding:'12px 0',overflowY:'auto'}}>
+          {visible.map(item => (
+            <button key={item.id} onClick={() => setPage(item.id)}
+              style={{width:'100%',display:'block',padding:'9px 20px',textAlign:'left',background:currentPage===item.id?'rgba(201,169,110,0.15)':'transparent',color:currentPage===item.id?'var(--gold)':'rgba(255,255,255,0.6)',border:'none',fontSize:13,cursor:'pointer',fontWeight:currentPage===item.id?500:400,borderLeft:currentPage===item.id?'3px solid var(--gold)':'3px solid transparent',transition:'all .15s'}}>
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <div style={{padding:'14px 20px',borderTop:'1px solid rgba(255,255,255,0.08)'}}>
+          <div style={{fontSize:12,fontWeight:500,color:'var(--white)',marginBottom:2}}>{user?.full_name}</div>
+          <div style={{fontSize:11,color:'rgba(255,255,255,0.4)',marginBottom:10}}>{roleLabel[user?.role]}</div>
+          <button className="btn btn-sm" onClick={logout} style={{width:'100%',fontSize:11,background:'transparent',color:'rgba(255,255,255,0.4)',border:'1px solid rgba(255,255,255,0.15)'}}>Sign out</button>
+        </div>
+      </div>
+      {/* Main */}
+      <div style={{marginLeft:220,flex:1,padding:28,minWidth:0}}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function DashboardView() {
+  const { user, authApi } = useAuth();
+  const [properties, setProperties] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    authApi('GET', '/properties').then(setProperties).catch(()=>{}).finally(()=>setLoading(false));
+  }, []);
+
+  if (loading) return <Spinner />;
+
+  const prop = properties[0];
+
+  return (
+    <div>
+      <PageHeader title="Dashboard" subtitle={`Welcome back, ${user?.full_name?.split(' ')[0]}`} />
+      {prop ? (
+        <>
+          <div className="stat-grid">
+            <div className="stat"><div className="stat-val">{properties.length}</div><div className="stat-lbl">Properties</div></div>
+            <div className="stat"><div className="stat-val">£{prop.guide_price ? (prop.guide_price/1000000).toFixed(2)+'m' : '—'}</div><div className="stat-lbl">Guide price</div></div>
+            <div className="stat"><div className="stat-val">{prop.bedrooms || '—'}</div><div className="stat-lbl">Bedrooms</div></div>
+            <div className="stat"><div className="stat-val">{prop.floor_area_sqft ? prop.floor_area_sqft.toLocaleString() : '—'}</div><div className="stat-lbl">Sq ft</div></div>
+          </div>
+          <div className="card" style={{marginBottom:16}}>
+            <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:8}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:500,fontFamily:"'Cormorant Garamond', serif"}}>{prop.address_line1}</div>
+                <div style={{fontSize:12,color:'var(--mid)'}}>{prop.city} · {prop.postcode} · {prop.tenure}</div>
+              </div>
+              <Badge status={prop.status} />
+            </div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:10}}>
+              <Badge status={prop.sale_mode} />
+              {prop.epc_rating && <span className="badge badge-green">EPC {prop.epc_rating}</span>}
+            </div>
+          </div>
+          <InfoBox type="purple" label="Platform status">
+            The platform is ready. Use the navigation to manage viewings, record feedback, log offers, handle documents, and manage AML/KYC. Everything is logged automatically.
+          </InfoBox>
+        </>
+      ) : (
+        <InfoBox type="amber" label="Getting started">
+          No properties yet. Go to Properties to create your first property listing.
+        </InfoBox>
+      )}
+    </div>
+  );
+}
+
+function PropertiesView() {
+  const { authApi } = useAuth();
+  const [properties, setProperties] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [showForm, setShowForm] = React.useState(false);
+  const [form, setForm] = React.useState({ address_line1:'', city:'London', postcode:'', tenure:'Freehold', guide_price:'', bedrooms:'', floor_area_sqft:'', year_built:'', epc_rating:'', sale_mode:'managed' });
+  const [error, setError] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  const load = () => {
+    authApi('GET', '/properties').then(setProperties).catch(()=>{}).finally(()=>setLoading(false));
+  };
+  React.useEffect(load, []);
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    setSaving(true); setError('');
+    try {
+      await authApi('POST', '/properties', { ...form, guide_price: parseInt(form.guide_price)||null, bedrooms: parseInt(form.bedrooms)||null, floor_area_sqft: parseInt(form.floor_area_sqft)||null, year_built: parseInt(form.year_built)||null });
+      setShowForm(false);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally { setSaving(false); }
+  };
+
+  if (loading) return <Spinner />;
+
+  return (
+    <div>
+      <PageHeader title="Properties" subtitle={`${properties.length} properties`}
+        actions={<button className="btn btn-primary btn-sm" onClick={()=>setShowForm(!showForm)}>+ New property</button>} />
+
+      {showForm && (
+        <div className="card" style={{marginBottom:16}}>
+          <h3 style={{marginBottom:14,fontSize:16}}>Add new property</h3>
+          <form onSubmit={handleCreate}>
+            <div className="grid2">
+              <div className="field"><label>Address line 1 *</label><input value={form.address_line1} onChange={e=>setForm({...form,address_line1:e.target.value})} placeholder="e.g. 32 Mapesbury Road" required /></div>
+              <div className="field"><label>Address line 2</label><input value={form.address_line2||''} onChange={e=>setForm({...form,address_line2:e.target.value})} placeholder="Apartment, floor, etc." /></div>
+              <div className="field"><label>City *</label><input value={form.city} onChange={e=>setForm({...form,city:e.target.value})} required /></div>
+              <div className="field"><label>Postcode *</label><input value={form.postcode} onChange={e=>setForm({...form,postcode:e.target.value})} placeholder="e.g. NW2 4JD" required /></div>
+              <div className="field"><label>Tenure</label><select value={form.tenure} onChange={e=>setForm({...form,tenure:e.target.value})}><option>Freehold</option><option>Leasehold</option><option>Share of Freehold</option></select></div>
+              <div className="field"><label>Guide price (£)</label><input type="number" value={form.guide_price} onChange={e=>setForm({...form,guide_price:e.target.value})} placeholder="e.g. 5850000" /></div>
+              <div className="field"><label>Bedrooms</label><input type="number" value={form.bedrooms} onChange={e=>setForm({...form,bedrooms:e.target.value})} placeholder="6" /></div>
+              <div className="field"><label>Floor area (sq ft)</label><input type="number" value={form.floor_area_sqft} onChange={e=>setForm({...form,floor_area_sqft:e.target.value})} placeholder="5278" /></div>
+              <div className="field"><label>Year built</label><input type="number" value={form.year_built} onChange={e=>setForm({...form,year_built:e.target.value})} placeholder="e.g. 1895" /></div>
+              <div className="field"><label>EPC rating</label><select value={form.epc_rating} onChange={e=>setForm({...form,epc_rating:e.target.value})}><option value="">—</option>{['A','B','C','D','E','F','G'].map(r=><option key={r}>{r}</option>)}</select></div>
+            </div>
+            <div className="field"><label>Sale mode</label>
+              <div style={{display:'flex',gap:10,marginTop:4}}>
+                {['direct','managed'].map(m=>(
+                  <label key={m} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:13}}>
+                    <input type="radio" name="sale_mode" value={m} checked={form.sale_mode===m} onChange={()=>setForm({...form,sale_mode:m})} />
+                    <span style={{fontWeight:500}}>{m==='direct'?'Direct sale — INHOUS only':'Managed sale — external agents'}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            {error && <div className="error-text" style={{marginBottom:10}}>{error}</div>}
+            <div style={{display:'flex',gap:8}}>
+              <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>{saving?'Creating…':'Create property'}</button>
+              <button type="button" className="btn btn-sm" onClick={()=>setShowForm(false)}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {properties.length === 0 ? (
+        <div className="empty"><div className="empty-icon">🏡</div><div>No properties yet</div></div>
+      ) : (
+        <div>
+          {properties.map(p => (
+            <div key={p.id} className="card" style={{marginBottom:12}}>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between'}}>
+                <div>
+                  <div style={{fontSize:16,fontWeight:500,fontFamily:"'Cormorant Garamond', serif"}}>{p.address_line1}{p.address_line2?`, ${p.address_line2}`:''}</div>
+                  <div style={{fontSize:12,color:'var(--mid)',marginTop:2}}>{p.city} · {p.postcode}{p.tenure?` · ${p.tenure}`:''}</div>
+                </div>
+                <Badge status={p.status} />
+              </div>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:10}}>
+                {p.guide_price && <span className="badge badge-purple">£{(p.guide_price/1000000).toFixed(2)}m</span>}
+                <Badge status={p.sale_mode} />
+                {p.bedrooms && <span className="badge badge-gray">{p.bedrooms} bed</span>}
+                {p.floor_area_sqft && <span className="badge badge-gray">{p.floor_area_sqft.toLocaleString()} sq ft</span>}
+                {p.epc_rating && <span className="badge badge-green">EPC {p.epc_rating}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ViewingsView() {
+  const { authApi, user } = useAuth();
+  const [properties, setProperties] = React.useState([]);
+  const [selectedProp, setSelectedProp] = React.useState(null);
+  const [viewings, setViewings] = React.useState([]);
+  const [availability, setAvailability] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [showBook, setShowBook] = React.useState(false);
+  const [bookDate, setBookDate] = React.useState('');
+  const [slots, setSlots] = React.useState([]);
+  const [selectedSlot, setSelectedSlot] = React.useState(null);
+  const [buyerRef, setBuyerRef] = React.useState('');
+  const [buyerNotes, setBuyerNotes] = React.useState('');
+  const [bookError, setBookError] = React.useState('');
+  const [booking, setBooking] = React.useState(false);
+  const [success, setSuccess] = React.useState('');
+
+  React.useEffect(() => {
+    authApi('GET', '/properties').then(ps => {
+      setProperties(ps);
+      if (ps.length) loadProperty(ps[0].id);
+    });
+  }, []);
+
+  const loadProperty = async (pid) => {
+    setSelectedProp(pid);
+    setLoading(true);
+    const [v, a] = await Promise.all([
+      authApi('GET', `/properties/${pid}/viewings`),
+      authApi('GET', `/properties/${pid}/availability`),
+    ]).catch(()=>[[], null]);
+    setViewings(v || []);
+    setAvailability(a);
+    setLoading(false);
+  };
+
+  const loadSlots = async (date) => {
+    setBookDate(date); setSelectedSlot(null);
+    if (!date || !selectedProp) return;
+    const data = await authApi('GET', `/properties/${selectedProp}/available-slots?date=${date}`).catch(()=>({slots:[]}));
+    setSlots(data.slots || []);
+  };
+
+  const doBook = async () => {
+    if (!selectedSlot || !buyerRef.trim()) { setBookError('Please select a slot and enter a buyer reference'); return; }
+    setBooking(true); setBookError('');
+    try {
+      await authApi('POST', `/properties/${selectedProp}/viewings`, {
+        requested_date: bookDate, requested_time: selectedSlot.time,
+        buyer_reference: buyerRef, buyer_notes: buyerNotes
+      });
+      setSuccess(`Viewing ${selectedSlot.mode === 'instant' ? 'confirmed' : 'request submitted'} for ${bookDate} at ${selectedSlot.time}`);
+      setShowBook(false); setBuyerRef(''); setBuyerNotes(''); setSelectedSlot(null);
+      loadProperty(selectedProp);
+    } catch (err) {
+      setBookError(err.message);
+    } finally { setBooking(false); }
+  };
+
+  const doConfirm = async (viewingId, action) => {
+    await authApi('POST', `/properties/${selectedProp}/viewings/${viewingId}/confirm`, {action}).catch(()=>{});
+    loadProperty(selectedProp);
+  };
+
+  const stats = {
+    total: viewings.length,
+    confirmed: viewings.filter(v=>v.status==='confirmed').length,
+    pending: viewings.filter(v=>v.status==='pending').length,
+    completed: viewings.filter(v=>v.status==='completed').length,
+  };
+
+  return (
+    <div>
+      <PageHeader title="Viewings" subtitle="Manage viewing bookings and availability"
+        actions={['broker','agent'].includes(user?.role) && <button className="btn btn-primary btn-sm" onClick={()=>setShowBook(!showBook)}>+ Book viewing</button>} />
+
+      {properties.length > 1 && (
+        <div className="field" style={{marginBottom:16}}>
+          <label>Property</label>
+          <select value={selectedProp||''} onChange={e=>loadProperty(Number(e.target.value))}>
+            {properties.map(p=><option key={p.id} value={p.id}>{p.address_line1}, {p.city}</option>)}
+          </select>
+        </div>
+      )}
+
+      {success && <InfoBox type="green">{success}</InfoBox>}
+
+      <div className="stat-grid">
+        <div className="stat"><div className="stat-val">{stats.total}</div><div className="stat-lbl">Total requests</div></div>
+        <div className="stat"><div className="stat-val">{stats.confirmed}</div><div className="stat-lbl">Confirmed</div></div>
+        <div className="stat"><div className="stat-val">{stats.pending}</div><div className="stat-lbl">Pending confirm</div></div>
+        <div className="stat"><div className="stat-val">{stats.completed}</div><div className="stat-lbl">Completed</div></div>
+      </div>
+
+      {showBook && (
+        <div className="card" style={{marginBottom:16}}>
+          <h3 style={{marginBottom:14,fontSize:16}}>Book a viewing</h3>
+          <InfoBox type="purple" label="Agent isolation">
+            {user?.role === 'agent' ? 'You will see available slots only. Other agents\' bookings are not visible.' : 'Select a date to see available slots based on vendor availability and buffer settings.'}
+          </InfoBox>
+          <div className="grid2">
+            <div className="field"><label>Date</label><input type="date" value={bookDate} onChange={e=>loadSlots(e.target.value)} min={new Date().toISOString().split('T')[0]} /></div>
+          </div>
+          {slots.length > 0 && (
+            <div className="field">
+              <label>Available slots</label>
+              <div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:6}}>
+                {slots.map(s => {
+                  if (s.booked) return <span key={s.time} style={{padding:'6px 12px',borderRadius:6,background:'var(--light)',color:'var(--mid)',fontSize:12,border:'1px solid var(--border)'}}>{s.time} — Booked</span>;
+                  if (!s.available) return <span key={s.time} style={{padding:'6px 12px',borderRadius:6,background:'var(--light)',color:'var(--mid)',fontSize:12,border:'1px dashed var(--border)',opacity:0.5}}>{s.time} — Buffer</span>;
+                  return (
+                    <button key={s.time} onClick={()=>setSelectedSlot(s)}
+                      style={{padding:'6px 12px',borderRadius:6,fontSize:12,border:`1px solid ${selectedSlot?.time===s.time?'var(--purple)':'var(--border)'}`,background:selectedSlot?.time===s.time?'var(--purple-light)':s.mode==='instant'?'var(--green-light)':'var(--blue-light)',color:selectedSlot?.time===s.time?'var(--purple)':s.mode==='instant'?'#27500A':'#0C447C',cursor:'pointer',fontWeight:500}}>
+                      {s.time} — {s.mode === 'instant' ? '⚡ Instant' : '⏳ Confirm needed'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {slots.length === 0 && bookDate && <InfoBox type="amber">No available slots on this date — try another day.</InfoBox>}
+          <div className="field"><label>Buyer reference *</label><input value={buyerRef} onChange={e=>setBuyerRef(e.target.value)} placeholder="e.g. Large family — primary residence · cash buyer" /></div>
+          <div className="field"><label>Notes for INHOUS</label><textarea value={buyerNotes} onChange={e=>setBuyerNotes(e.target.value)} placeholder="Any additional context about the buyer…" style={{minHeight:60}} /></div>
+          {bookError && <div className="error-text" style={{marginBottom:10}}>{bookError}</div>}
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-primary btn-sm" onClick={doBook} disabled={booking}>{booking?'Booking…':'Confirm booking'}</button>
+            <button className="btn btn-sm" onClick={()=>setShowBook(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {loading ? <Spinner /> : viewings.length === 0 ? (
+        <div className="empty"><div className="empty-icon">📅</div><div>No viewings yet</div></div>
+      ) : (
+        <div className="card">
+          <table className="table">
+            <thead><tr><th>Date & time</th><th>Agency</th>{user?.role==='broker'&&<th>Negotiator</th>}<th>Buyer</th><th>Mode</th><th>Status</th>{['broker','vendor'].includes(user?.role)&&<th>Action</th>}</tr></thead>
+            <tbody>
+              {viewings.map(v => (
+                <tr key={v.id}>
+                  <td style={{fontWeight:500}}>{v.requested_date}<br/><span style={{color:'var(--mid)',fontSize:12}}>{v.requested_time}{v.slot_end_time?` – ${v.slot_end_time}`:''}</span></td>
+                  <td>{v.agency_name}</td>
+                  {user?.role==='broker'&&<td style={{fontSize:12}}>{v.negotiator_name}</td>}
+                  <td style={{fontSize:12,color:'var(--mid)'}}>{v.buyer_reference||'—'}</td>
+                  <td><span className={`badge ${v.booking_mode==='instant'?'badge-green':'badge-blue'}`}>{v.booking_mode==='instant'?'Instant':'Confirm'}</span></td>
+                  <td><Badge status={v.status} /></td>
+                  {['broker','vendor'].includes(user?.role) && (
+                    <td>
+                      {v.status === 'pending' && (
+                        <div style={{display:'flex',gap:4}}>
+                          <button className="btn btn-sm btn-green" onClick={()=>doConfirm(v.id,'confirm')}>Confirm</button>
+                          <button className="btn btn-sm btn-danger" onClick={()=>doConfirm(v.id,'decline')}>Decline</button>
+                        </div>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {user?.role === 'broker' && availability && (
+        <div style={{marginTop:20}}>
+          <h3 style={{fontSize:16,marginBottom:10}}>Availability settings</h3>
+          <div className="card">
+            <div style={{fontSize:12,color:'var(--mid)',marginBottom:10}}>
+              Viewing duration: <strong>{availability.settings?.viewing_duration_mins||45} mins</strong> · 
+              Buffer: <strong>{availability.settings?.buffer_mins||60} mins</strong> · 
+              Max/day: <strong>{availability.settings?.max_per_day||4}</strong> · 
+              Window: <strong>{availability.settings?.earliest_start||'09:00'} – {availability.settings?.latest_start||'16:00'}</strong>
+            </div>
+            {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((day,i)=>{
+              const a = availability.by_day_of_week?.find(x=>x.day_of_week===i);
+              return (
+                <div key={day} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 0',borderBottom:'1px solid var(--border)'}}>
+                  <div style={{width:40,fontSize:12,fontWeight:500}}>{day}</div>
+                  <span className={`badge ${a?.mode==='instant'?'badge-green':a?.mode==='confirm'?'badge-blue':'badge-gray'}`}>
+                    {a?.mode==='instant'?'⚡ Instant book':a?.mode==='confirm'?'⏳ Confirm needed':'🚫 Blocked'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FeedbackView() {
+  const { authApi, user } = useAuth();
+  const [properties, setProperties] = React.useState([]);
+  const [selectedProp, setSelectedProp] = React.useState(null);
+  const [feedback, setFeedback] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    authApi('GET', '/properties').then(ps => {
+      setProperties(ps);
+      if (ps.length) loadFeedback(ps[0].id);
+    });
+  }, []);
+
+  const loadFeedback = async (pid) => {
+    setSelectedProp(pid); setLoading(true);
+    const f = await authApi('GET', `/properties/${pid}/feedback`).catch(()=>[]);
+    setFeedback(f||[]); setLoading(false);
+  };
+
+  // Count objection themes
+  const themes = {};
+  feedback.forEach(f => {
+    if (f.objections) {
+      f.objections.split(',').forEach(o => { const t = o.trim(); if(t) themes[t]=(themes[t]||0)+1; });
+    }
+  });
+  const topThemes = Object.entries(themes).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  return (
+    <div>
+      <PageHeader title="Viewing feedback" subtitle={`${feedback.length} feedback records`} />
+      {properties.length > 1 && (
+        <div className="field" style={{marginBottom:16}}><label>Property</label>
+          <select value={selectedProp||''} onChange={e=>loadFeedback(Number(e.target.value))}>
+            {properties.map(p=><option key={p.id} value={p.id}>{p.address_line1}, {p.city}</option>)}
+          </select>
+        </div>
+      )}
+      {topThemes.length > 0 && (
+        <div className="card" style={{marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:10}}>Recurring themes</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+            {topThemes.map(([theme, count]) => (
+              <span key={theme} className="badge badge-amber" style={{fontSize:12}}>
+                {theme} ×{count}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {loading ? <Spinner /> : feedback.length === 0 ? (
+        <div className="empty"><div className="empty-icon">💬</div><div>No feedback yet</div></div>
+      ) : (
+        <div>
+          {feedback.map(f => (
+            <div key={f.id} className="card" style={{marginBottom:10}}>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:6}}>
+                <div>
+                  <div style={{fontWeight:500,fontSize:14}}>{f.agency_name}{user?.role==='broker'&&f.negotiator_name?` · ${f.negotiator_name}`:''}</div>
+                  <div style={{fontSize:12,color:'var(--mid)'}}>{f.requested_date} at {f.requested_time}</div>
+                </div>
+                {f.interest_level && <span className={`badge ${f.interest_level==='hot'?'badge-red':f.interest_level==='warm'?'badge-amber':'badge-gray'}`}>{f.interest_level?.toUpperCase()}</span>}
+              </div>
+              {f.objections && <div style={{fontSize:12,color:'var(--mid)',marginBottom:4}}>Objections: {f.objections}</div>}
+              {f.comments && <div style={{fontSize:13,color:'var(--dark)',marginTop:4}}>{f.comments}</div>}
+              {f.broker_note && <div style={{marginTop:8,padding:'8px 10px',background:'var(--purple-light)',borderRadius:6,fontSize:12,color:'var(--purple)'}}>Broker note: {f.broker_note}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OffersView() {
+  const { authApi, user } = useAuth();
+  const [properties, setProperties] = React.useState([]);
+  const [selectedProp, setSelectedProp] = React.useState(null);
+  const [offers, setOffers] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [showForm, setShowForm] = React.useState(false);
+  const [form, setForm] = React.useState({ amount:'', buyer_full_name:'', purchase_method:'cash', chain_status:'chain_free', conditions:'', buyer_solicitor_firm:'', buyer_solicitor_name:'', buyer_solicitor_email:'', buyer_notes:'' });
+  const [error, setError] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    authApi('GET', '/properties').then(ps => {
+      setProperties(ps); if(ps.length) loadOffers(ps[0].id);
+    });
+  }, []);
+
+  const loadOffers = async (pid) => {
+    setSelectedProp(pid); setLoading(true);
+    const o = await authApi('GET', `/properties/${pid}/offers`).catch(()=>[]);
+    setOffers(o||[]); setLoading(false);
+  };
+
+  const submitOffer = async (e) => {
+    e.preventDefault(); setSaving(true); setError('');
+    try {
+      await authApi('POST', `/properties/${selectedProp}/offers`, { ...form, amount: parseInt(form.amount)||0 });
+      setShowForm(false); loadOffers(selectedProp);
+    } catch (err) { setError(err.message); } finally { setSaving(false); }
+  };
+
+  const doAction = async (offerId, action, extra={}) => {
+    await authApi('POST', `/properties/${selectedProp}/offers/${offerId}/action`, {action,...extra}).catch(()=>{});
+    loadOffers(selectedProp);
+  };
+
+  return (
+    <div>
+      <PageHeader title="Offers" subtitle={`${offers.length} offer${offers.length!==1?'s':''} received`}
+        actions={['broker','agent'].includes(user?.role) && <button className="btn btn-primary btn-sm" onClick={()=>setShowForm(!showForm)}>+ Log offer</button>} />
+
+      {properties.length > 1 && (
+        <div className="field" style={{marginBottom:16}}><label>Property</label>
+          <select value={selectedProp||''} onChange={e=>loadOffers(Number(e.target.value))}>
+            {properties.map(p=><option key={p.id} value={p.id}>{p.address_line1}, {p.city}</option>)}
+          </select>
+        </div>
+      )}
+
+      {user?.role === 'agent' && (
+        <InfoBox type="amber" label="Agent view — restricted">
+          You can see the status of your own submitted offers only. Offer amounts from other agents are not visible.
+        </InfoBox>
+      )}
+
+      {showForm && (
+        <div className="card" style={{marginBottom:16}}>
+          <h3 style={{marginBottom:14,fontSize:16}}>Log an offer</h3>
+          <form onSubmit={submitOffer}>
+            <div className="grid2">
+              <div className="field"><label>Offer amount (£) *</label><input type="number" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} placeholder="e.g. 5250000" required /></div>
+              <div className="field"><label>Buyer full name *</label><input value={form.buyer_full_name} onChange={e=>setForm({...form,buyer_full_name:e.target.value})} placeholder="As on contract" required /></div>
+              <div className="field"><label>Purchase method</label><select value={form.purchase_method} onChange={e=>setForm({...form,purchase_method:e.target.value})}><option value="cash">Cash buyer</option><option value="mortgage">Mortgage</option><option value="part">Part cash / part mortgage</option></select></div>
+              <div className="field"><label>Chain status</label><select value={form.chain_status} onChange={e=>setForm({...form,chain_status:e.target.value})}><option value="chain_free">Chain free</option><option value="property_to_sell_uo">Property to sell — under offer</option><option value="property_to_sell">Property to sell — not yet listed</option><option value="in_rental">In rental</option></select></div>
+              <div className="field"><label>Buyer solicitor firm</label><input value={form.buyer_solicitor_firm} onChange={e=>setForm({...form,buyer_solicitor_firm:e.target.value})} placeholder="e.g. Thompson & Hart LLP" /></div>
+              <div className="field"><label>Buyer solicitor name</label><input value={form.buyer_solicitor_name} onChange={e=>setForm({...form,buyer_solicitor_name:e.target.value})} placeholder="e.g. Sarah Thompson" /></div>
+            </div>
+            <div className="field"><label>Conditions attached</label><textarea value={form.conditions} onChange={e=>setForm({...form,conditions:e.target.value})} placeholder="e.g. Subject to satisfactory survey. None stated." style={{minHeight:60}} /></div>
+            {error && <div className="error-text" style={{marginBottom:10}}>{error}</div>}
+            <div style={{display:'flex',gap:8}}>
+              <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>{saving?'Submitting…':'Submit offer'}</button>
+              <button type="button" className="btn btn-sm" onClick={()=>setShowForm(false)}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {loading ? <Spinner /> : offers.length === 0 ? (
+        <div className="empty"><div className="empty-icon">💷</div><div>No offers yet</div></div>
+      ) : (
+        <div>
+          {offers.sort((a,b)=>(b.amount||0)-(a.amount||0)).map(offer => (
+            <div key={offer.id} className="card" style={{marginBottom:12,borderLeft:`3px solid ${offer.status==='accepted'?'var(--green)':offer.status==='declined'?'var(--red)':'var(--purple)'}`}}>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:8}}>
+                <div>
+                  <div style={{fontSize:20,fontWeight:600,fontFamily:"'Cormorant Garamond', serif",color:'var(--purple)'}}>£{offer.amount?.toLocaleString()}</div>
+                  <div style={{fontSize:13,fontWeight:500,marginTop:2}}>{offer.buyer_full_name}</div>
+                  <div style={{fontSize:12,color:'var(--mid)'}}>{offer.agency_name}{user?.role==='broker'&&offer.negotiator_name?` · ${offer.negotiator_name}`:''}</div>
+                </div>
+                <Badge status={offer.status} />
+              </div>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+                {offer.purchase_method && <span className={`badge ${offer.purchase_method==='cash'?'badge-green':'badge-blue'}`}>{offer.purchase_method==='cash'?'Cash buyer':offer.purchase_method==='mortgage'?'Mortgage':'Part cash/mortgage'}</span>}
+                {offer.chain_status && <span className={`badge ${offer.chain_status==='chain_free'?'badge-green':'badge-amber'}`}>{offer.chain_status.replace(/_/g,' ')}</span>}
+                {offer.proof_of_funds_status && <span className={`badge ${offer.proof_of_funds_status==='confirmed'?'badge-green':offer.proof_of_funds_status==='received'?'badge-green':'badge-gray'}`}>Funds: {offer.proof_of_funds_status.replace(/_/g,' ')}</span>}
+              </div>
+              {offer.conditions && <div style={{fontSize:12,color:'var(--mid)',marginBottom:8}}>Conditions: {offer.conditions}</div>}
+              {['broker','vendor'].includes(user?.role) && offer.status==='submitted' && (
+                <div style={{display:'flex',gap:6,marginTop:8}}>
+                  <button className="btn btn-sm btn-green" onClick={()=>doAction(offer.id,'accept')}>Accept offer</button>
+                  <button className="btn btn-sm" onClick={()=>doAction(offer.id,'decline')}>Decline</button>
+                  <button className="btn btn-sm btn-primary" onClick={()=>doAction(offer.id,'counter',{counter_amount:offer.amount*0.98,counter_notes:'Counter at adjusted figure'})}>Counter</button>
+                </div>
+              )}
+              {offer.status==='accepted' && (
+                <InfoBox type="green" label="Accepted — next steps">
+                  Buyer solicitor, vendor solicitor, bank/lender, and removal companies have all been notified automatically. AML/KYC must be cleared before memo of sale can be issued.
+                </InfoBox>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DocumentsView() {
+  const { authApi, user } = useAuth();
+  const [properties, setProperties] = React.useState([]);
+  const [selectedProp, setSelectedProp] = React.useState(null);
+  const [docs, setDocs] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
+  const [docType, setDocType] = React.useState('other');
+  const fileRef = React.useRef();
+
+  React.useEffect(() => {
+    authApi('GET', '/properties').then(ps => { setProperties(ps); if(ps.length) loadDocs(ps[0].id); });
+  }, []);
+
+  const loadDocs = async (pid) => {
+    setSelectedProp(pid); setLoading(true);
+    const d = await authApi('GET', `/properties/${pid}/documents`).catch(()=>[]);
+    setDocs(d||[]); setLoading(false);
+  };
+
+  const handleUpload = async (e) => {
+    const file = e.target.files[0]; if(!file) return;
+    setUploading(true);
+    const form = new FormData();
+    form.append('file', file);
+    form.append('doc_type', docType);
+    const headers = {};
+    const tok = localStorage.getItem('inhous_token');
+    if(tok) headers['Authorization'] = `Bearer ${tok}`;
+    const res = await fetch(`${API}/properties/${selectedProp}/documents`, { method:'POST', headers, body:form });
+    setUploading(false);
+    if(res.ok) loadDocs(selectedProp);
+  };
+
+  const docTypeLabel = { photo:'Photo', floorplan:'Floorplan', epc:'EPC', brochure:'Brochure', aml_vendor:'Vendor AML', aml_buyer:'Buyer AML', title_register:'Title register', planning:'Planning', proof_of_funds:'Proof of funds', agent_terms:'Agent terms', memo_of_sale:'Memo of sale', survey:'Survey', other:'Other' };
+
+  return (
+    <div>
+      <PageHeader title="Documents" subtitle="Property document vault" />
+      {properties.length > 1 && (
+        <div className="field" style={{marginBottom:16}}><label>Property</label>
+          <select value={selectedProp||''} onChange={e=>loadDocs(Number(e.target.value))}>
+            {properties.map(p=><option key={p.id} value={p.id}>{p.address_line1}</option>)}
+          </select>
+        </div>
+      )}
+      {['broker','vendor_solicitor','buyer_solicitor','vendor'].includes(user?.role) && (
+        <div className="card" style={{marginBottom:16}}>
+          <div style={{display:'flex',gap:10,alignItems:'flex-end'}}>
+            <div className="field" style={{flex:1,marginBottom:0}}>
+              <label>Upload document</label>
+              <select value={docType} onChange={e=>setDocType(e.target.value)}>
+                {Object.entries(docTypeLabel).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            <button className="btn btn-primary btn-sm" onClick={()=>fileRef.current?.click()} disabled={uploading}>{uploading?'Uploading…':'Choose file'}</button>
+            <input ref={fileRef} type="file" style={{display:'none'}} onChange={handleUpload} />
+          </div>
+        </div>
+      )}
+      {loading ? <Spinner /> : docs.length === 0 ? (
+        <div className="empty"><div className="empty-icon">📁</div><div>No documents yet</div></div>
+      ) : (
+        <div className="card">
+          <table className="table">
+            <thead><tr><th>Document</th><th>Type</th><th>Uploaded by</th><th>Date</th><th>Status</th></tr></thead>
+            <tbody>
+              {docs.map(d=>(
+                <tr key={d.id}>
+                  <td style={{fontWeight:500}}>{d.original_filename||d.filename}</td>
+                  <td><span className="badge badge-gray">{docTypeLabel[d.doc_type]||d.doc_type}</span></td>
+                  <td style={{fontSize:12,color:'var(--mid)'}}>{d.uploaded_by_name||'—'}</td>
+                  <td style={{fontSize:12,color:'var(--mid)'}}>{d.created_at?.split('T')[0]}</td>
+                  <td><Badge status={d.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AMLView() {
+  const { authApi, user } = useAuth();
+  const [properties, setProperties] = React.useState([]);
+  const [selectedProp, setSelectedProp] = React.useState(null);
+  const [records, setRecords] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [showForm, setShowForm] = React.useState(false);
+  const [form, setForm] = React.useState({ party_type:'vendor', person_name:'', dob:'', nationality:'' });
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    authApi('GET', '/properties').then(ps => { setProperties(ps); if(ps.length) load(ps[0].id); });
+  }, []);
+
+  const load = async (pid) => {
+    setSelectedProp(pid); setLoading(true);
+    const r = await authApi('GET', `/properties/${pid}/aml`).catch(()=>[]);
+    setRecords(r||[]); setLoading(false);
+  };
+
+  const create = async (e) => {
+    e.preventDefault(); setSaving(true);
+    await authApi('POST', `/properties/${selectedProp}/aml`, form).catch(()=>{});
+    setShowForm(false); setSaving(false); load(selectedProp);
+  };
+
+  const certify = async (id) => {
+    await authApi('POST', `/properties/${selectedProp}/aml/${id}/certify`).catch(()=>{});
+    load(selectedProp);
+  };
+
+  return (
+    <div>
+      <PageHeader title="AML / KYC" subtitle="Identity verification records"
+        actions={['broker','vendor_solicitor'].includes(user?.role) && <button className="btn btn-primary btn-sm" onClick={()=>setShowForm(!showForm)}>+ Add record</button>} />
+
+      {user?.role === 'agent' && (
+        <InfoBox type="amber" label="Agent access — status only">
+          You can see the vendor AML verification status only. Identity documents are never shared with agents.
+        </InfoBox>
+      )}
+
+      {showForm && (
+        <div className="card" style={{marginBottom:16}}>
+          <form onSubmit={create}>
+            <div className="grid2">
+              <div className="field"><label>Party type</label><select value={form.party_type} onChange={e=>setForm({...form,party_type:e.target.value})}><option value="vendor">Vendor</option><option value="buyer">Buyer</option></select></div>
+              <div className="field"><label>Full name *</label><input value={form.person_name} onChange={e=>setForm({...form,person_name:e.target.value})} required /></div>
+              <div className="field"><label>Date of birth</label><input type="date" value={form.dob} onChange={e=>setForm({...form,dob:e.target.value})} /></div>
+              <div className="field"><label>Nationality</label><input value={form.nationality} onChange={e=>setForm({...form,nationality:e.target.value})} /></div>
+            </div>
+            <div style={{display:'flex',gap:8}}><button type="submit" className="btn btn-primary btn-sm" disabled={saving}>{saving?'Saving…':'Create'}</button><button type="button" className="btn btn-sm" onClick={()=>setShowForm(false)}>Cancel</button></div>
+          </form>
+        </div>
+      )}
+
+      {loading ? <Spinner /> : records.length === 0 ? (
+        <div className="empty"><div className="empty-icon">🛡️</div><div>No AML records yet</div></div>
+      ) : (
+        <div>
+          {records.map(r => (
+            <div key={r.id} className="card" style={{marginBottom:10,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div>
+                <div style={{fontWeight:500}}>{r.person_name}</div>
+                <div style={{fontSize:12,color:'var(--mid)'}}>{r.party_type} · {r.nationality||'—'}{r.dob?` · DOB: ${r.dob}`:''}</div>
+                {r.certified_by_name && <div style={{fontSize:12,color:'var(--green)',marginTop:2}}>Certified by {r.certified_by_name}</div>}
+              </div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <Badge status={r.status} />
+                {['broker','vendor_solicitor','buyer_solicitor'].includes(user?.role) && r.status!=='certified' && (
+                  <button className="btn btn-sm btn-green" onClick={()=>certify(r.id)}>Certify</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PhotographyView() {
+  const { authApi, user } = useAuth();
+  const [properties, setProperties] = React.useState([]);
+  const [selectedProp, setSelectedProp] = React.useState(null);
+  const [bookings, setBookings] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [edits, setEdits] = React.useState({});
+  const [saving, setSaving] = React.useState(null);
+
+  React.useEffect(() => {
+    authApi('GET', '/properties').then(ps => { setProperties(ps); if(ps.length) load(ps[0].id); });
+  }, []);
+
+  const load = async (pid) => {
+    setSelectedProp(pid); setLoading(true);
+    const b = await authApi('GET', `/properties/${pid}/photography`).catch(()=>[]);
+    setBookings(b||[]); setLoading(false);
+  };
+
+  const save = async (booking) => {
+    setSaving(booking.id);
+    const data = edits[booking.id] || {};
+    await authApi('PATCH', `/properties/${selectedProp}/photography/${booking.id}`, data).catch(()=>{});
+    setSaving(null); load(selectedProp);
+  };
+
+  const setEdit = (id, key, val) => setEdits(prev => ({...prev, [id]: {...(prev[id]||{}), [key]: val}}));
+
+  const typeLabel = { photography:'Photography', floorplan:'Floorplan', both:'Photography & Floorplan' };
+
+  return (
+    <div>
+      <PageHeader title="Photography & Floorplan" subtitle="Book and manage property photography" />
+      <InfoBox type="gold" label="Important">
+        The property listing cannot go live until photography is approved and the floorplan is uploaded. The vendor selects preferred dates — please allow at least 7 days for preparation.
+      </InfoBox>
+      {properties.length > 1 && (
+        <div className="field" style={{marginBottom:16}}><label>Property</label>
+          <select value={selectedProp||''} onChange={e=>load(Number(e.target.value))}>
+            {properties.map(p=><option key={p.id} value={p.id}>{p.address_line1}</option>)}
+          </select>
+        </div>
+      )}
+      {loading ? <Spinner /> : bookings.map(b => (
+        <div key={b.id} className="card" style={{marginBottom:12}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+            <h3 style={{fontSize:16}}>{typeLabel[b.booking_type]}</h3>
+            <Badge status={b.status} />
+          </div>
+          <div className="grid2">
+            <div className="field"><label>Preferred date</label>
+              <input type="date" defaultValue={b.preferred_date||''} min={new Date(Date.now()+7*86400000).toISOString().split('T')[0]}
+                onChange={e=>setEdit(b.id,'preferred_date',e.target.value)} />
+            </div>
+            <div className="field"><label>Preferred time</label>
+              <select defaultValue={b.preferred_time||''} onChange={e=>setEdit(b.id,'preferred_time',e.target.value)}>
+                <option value="">— Select —</option>
+                {['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00'].map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            {user?.role==='broker' && <>
+              <div className="field"><label>Photographer firm</label><input defaultValue={b.photographer_firm||''} onChange={e=>setEdit(b.id,'photographer_firm',e.target.value)} placeholder="e.g. Lens & Light Photography" /></div>
+              <div className="field"><label>Photographer email</label><input type="email" defaultValue={b.photographer_email||''} onChange={e=>setEdit(b.id,'photographer_email',e.target.value)} /></div>
+            </>}
+          </div>
+          <div className="field"><label>{user?.role==='vendor'?'Notes / preparation':'Brief for photographer'}</label>
+            <textarea defaultValue={user?.role==='vendor'?b.vendor_notes||'':b.broker_brief||''} onChange={e=>setEdit(b.id,user?.role==='vendor'?'vendor_notes':'broker_brief',e.target.value)} placeholder={user?.role==='vendor'?'Anything you want us to know — rooms ready, areas to focus on…':'Key shots required, rooms to prioritise, access notes…'} style={{minHeight:70}} />
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={()=>save(b)} disabled={saving===b.id}>{saving===b.id?'Saving…':'Save & confirm date'}</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NotificationsView() {
+  const { authApi } = useAuth();
+  const [notifs, setNotifs] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    authApi('GET', '/notifications').then(n=>{setNotifs(n||[]); authApi('POST','/notifications/mark-read');}).finally(()=>setLoading(false));
+  }, []);
+
+  const typeColor = { offer_received:'badge-purple', viewing_booked:'badge-green', viewing_confirmed:'badge-green', viewing_request:'badge-blue', feedback_received:'badge-amber', offer_accepted:'badge-green', action_required:'badge-red', aml_certified:'badge-green' };
+
+  return (
+    <div>
+      <PageHeader title="Notifications" subtitle={`${notifs.length} notifications`} />
+      {loading ? <Spinner /> : notifs.length === 0 ? (
+        <div className="empty"><div className="empty-icon">🔔</div><div>No notifications</div></div>
+      ) : (
+        <div className="card">
+          {notifs.map((n,i) => (
+            <div key={n.id} style={{padding:'12px 0',borderBottom:i<notifs.length-1?'1px solid var(--border)':'none',opacity:n.is_read?0.7:1}}>
+              <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                <span className={`badge ${typeColor[n.type]||'badge-gray'}`} style={{marginTop:1,flexShrink:0}}>{n.type?.replace(/_/g,' ')}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:500,fontSize:13}}>{n.title}</div>
+                  {n.message && <div style={{fontSize:12,color:'var(--mid)',marginTop:2}}>{n.message}</div>}
+                  <div style={{fontSize:11,color:'var(--mid)',marginTop:4}}>{n.created_at?.split('T')[0]}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminView() {
+  const { authApi } = useAuth();
+  const [form, setForm] = React.useState({ email:'', password:'', full_name:'', role:'agent', agency_name:'', phone:'' });
+  const [error, setError] = React.useState('');
+  const [success, setSuccess] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const [inviteForm, setInviteForm] = React.useState({ email:'', role:'vendor', agency_name:'', property_id:'' });
+  const [properties, setProperties] = React.useState([]);
+  const [inviteSuccess, setInviteSuccess] = React.useState('');
+
+  React.useEffect(() => { authApi('GET', '/properties').then(setProperties).catch(()=>{}); }, []);
+
+  const createUser = async (e) => {
+    e.preventDefault(); setSaving(true); setError(''); setSuccess('');
+    try { await authApi('POST', '/users', form); setSuccess(`User ${form.email} created successfully`); setForm({email:'',password:'',full_name:'',role:'agent',agency_name:'',phone:''}); } catch(err){ setError(err.message); } finally { setSaving(false); }
+  };
+
+  const sendInvite = async (e) => {
+    e.preventDefault(); setSaving(true); setInviteSuccess('');
+    try {
+      const res = await authApi('POST', `/properties/${inviteForm.property_id}/invite`, inviteForm);
+      setInviteSuccess(`Invite sent. Link: ${res.invite_url}`);
+    } catch(err){ setError(err.message); } finally { setSaving(false); }
+  };
+
+  const roleOpts = ['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office'];
+
+  return (
+    <div>
+      <PageHeader title="Admin" subtitle="User management and invites" />
+      <div className="grid2" style={{gap:20}}>
+        <div>
+          <h3 style={{fontSize:16,marginBottom:12}}>Create user account</h3>
+          <div className="card">
+            <form onSubmit={createUser}>
+              <div className="field"><label>Email *</label><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} required /></div>
+              <div className="field"><label>Password *</label><input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Min 8 characters" required /></div>
+              <div className="field"><label>Full name *</label><input value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})} required /></div>
+              <div className="field"><label>Role *</label><select value={form.role} onChange={e=>setForm({...form,role:e.target.value})}>{roleOpts.map(r=><option key={r} value={r}>{r.replace(/_/g,' ')}</option>)}</select></div>
+              <div className="field"><label>Agency name</label><input value={form.agency_name} onChange={e=>setForm({...form,agency_name:e.target.value})} /></div>
+              <div className="field"><label>Phone</label><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} /></div>
+              {error && <div className="error-text" style={{marginBottom:8}}>{error}</div>}
+              {success && <div className="success-text" style={{marginBottom:8}}>{success}</div>}
+              <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>{saving?'Creating…':'Create user'}</button>
+            </form>
+          </div>
+        </div>
+        <div>
+          <h3 style={{fontSize:16,marginBottom:12}}>Send invite link</h3>
+          <div className="card">
+            <form onSubmit={sendInvite}>
+              <div className="field"><label>Property *</label>
+                <select value={inviteForm.property_id} onChange={e=>setInviteForm({...inviteForm,property_id:e.target.value})} required>
+                  <option value="">— Select property —</option>
+                  {properties.map(p=><option key={p.id} value={p.id}>{p.address_line1}</option>)}
+                </select>
+              </div>
+              <div className="field"><label>Email *</label><input type="email" value={inviteForm.email} onChange={e=>setInviteForm({...inviteForm,email:e.target.value})} required /></div>
+              <div className="field"><label>Role *</label><select value={inviteForm.role} onChange={e=>setInviteForm({...inviteForm,role:e.target.value})}>{roleOpts.filter(r=>r!=='broker').map(r=><option key={r} value={r}>{r.replace(/_/g,' ')}</option>)}</select></div>
+              <div className="field"><label>Agency name</label><input value={inviteForm.agency_name} onChange={e=>setInviteForm({...inviteForm,agency_name:e.target.value})} /></div>
+              {inviteSuccess && <div className="success-text" style={{marginBottom:8,wordBreak:'break-all'}}>{inviteSuccess}</div>}
+              <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>{saving?'Sending…':'Send invite'}</button>
+            </form>
+            <div style={{marginTop:14,paddingTop:12,borderTop:'1px solid var(--border)'}}>
+              <InfoBox type="purple" label="How invites work">
+                The invite link gives the recipient a secure URL to create their account. It expires after 7 days and can only be used once. They land directly on their role-specific dashboard.
+              </InfoBox>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── APP ROOT ──────────────────────────────────────────────────────────────────
+function App() {
+  const { user, loading } = useAuth();
+  const [page, setPage] = React.useState('dashboard');
+
+  if (loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--cream)'}}><div style={{textAlign:'center'}}><div style={{fontSize:28,fontFamily:"'Cormorant Garamond', serif",color:'var(--gold)',marginBottom:8}}>INHOUS</div><div style={{color:'var(--mid)',fontSize:13}}>Loading…</div></div></div>;
+  if (!user) return <LoginView />;
+
+  const views = { dashboard:<DashboardView/>, properties:<PropertiesView/>, viewings:<ViewingsView/>, feedback:<FeedbackView/>, offers:<OffersView/>, documents:<DocumentsView/>, aml:<AMLView/>, photography:<PhotographyView/>, notifications:<NotificationsView/>, admin:<AdminView/> };
+
+  return (
+    <DashboardLayout currentPage={page} setPage={setPage}>
+      {views[page] || <DashboardView />}
+    </DashboardLayout>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<AuthProvider><App /></AuthProvider>);
+</script>
+</body>
+</html>
