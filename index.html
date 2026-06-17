@@ -584,7 +584,7 @@ function ViewingsView({ propId }) {
       <PageHeader title="Viewings" subtitle="Manage viewing bookings and availability"
         actions={['broker','agent'].includes(user?.role) && <button className="btn btn-primary btn-sm" onClick={()=>setShowBook(!showBook)}>+ Book viewing</button>} />
 
-      {properties.length > 1 && (
+      {properties.length > 1 && !propId && (
         <div className="field" style={{marginBottom:16}}>
           <label>Property</label>
           <select value={selectedProp||''} onChange={e=>loadProperty(Number(e.target.value))}>
@@ -947,7 +947,7 @@ function OffersView({ propId }) {
       <PageHeader title="Offers" subtitle={`${offers.length} offer${offers.length!==1?'s':''} received`}
         actions={['broker','agent'].includes(user?.role) && <button className="btn btn-primary btn-sm" onClick={()=>setShowForm(!showForm)}>+ Log offer</button>} />
 
-      {properties.length > 1 && (
+      {properties.length > 1 && !propId && (
         <div className="field" style={{marginBottom:16}}><label>Property</label>
           <select value={selectedProp||''} onChange={e=>loadOffers(Number(e.target.value))}>
             {properties.map(p=><option key={p.id} value={p.id}>{p.address_line1}, {p.city}</option>)}
@@ -1125,7 +1125,7 @@ function DocumentsView({ propId }) {
   return (
     <div>
       <PageHeader title="Documents" subtitle="Property document vault" />
-      {properties.length > 1 && (
+      {properties.length > 1 && !propId && (
         <div className="field" style={{marginBottom:16}}><label>Property</label>
           <select value={selectedProp||''} onChange={e=>loadDocs(Number(e.target.value))}>
             {properties.map(p=><option key={p.id} value={p.id}>{p.address_line1}</option>)}
@@ -1377,7 +1377,7 @@ function PhotographyView({ propId }) {
       <InfoBox type="gold" label="Important">
         The property listing cannot go live until photography is approved and the floorplan is uploaded. The vendor selects preferred dates — allowing a few days for preparation is recommended.
       </InfoBox>
-      {properties.length > 1 && (
+      {properties.length > 1 && !propId && (
         <div className="field" style={{marginBottom:16}}><label>Property</label>
           <select value={selectedProp||''} onChange={e=>load(Number(e.target.value))}>
             {properties.map(p=><option key={p.id} value={p.id}>{p.address_line1}</option>)}
@@ -1707,6 +1707,47 @@ function PartiesPanel({ propId }) {
   );
 }
 
+function PropertyShell({ prop, page, setPage, onBack, children }) {
+  const { user } = useAuth();
+  const sym = {GBP:'£',EUR:'€',USD:'$',CHF:'CHF ',AED:'AED '}[prop.currency||'GBP'] || '£';
+  const tabs = [
+    { id:'property', label:'Overview', roles:['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
+    { id:'viewings', label:'Viewings', roles:['broker','vendor','agent'] },
+    { id:'feedback', label:'Feedback', roles:['broker','vendor','agent'] },
+    { id:'offers', label:'Offers', roles:['broker','vendor','agent'] },
+    { id:'documents', label:'Documents', roles:['broker','vendor','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
+    { id:'aml', label:'AML / KYC', roles:['broker','vendor_solicitor','buyer_solicitor','agent'] },
+    { id:'photography', label:'Photography', roles:['broker','vendor'] },
+  ].filter(t => t.roles.includes(user?.role));
+  return (
+    <div>
+      <button className="btn btn-sm" onClick={onBack} style={{marginBottom:10}}>← All properties</button>
+      <div className="card" style={{marginBottom:16}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}}>
+          <div>
+            <div style={{fontSize:19,fontWeight:500,fontFamily:"'Cormorant Garamond', serif"}}>{prop.address_line1}{prop.address_line2?`, ${prop.address_line2}`:''}</div>
+            <div style={{fontSize:12,color:'var(--mid)',marginTop:2}}>{prop.city}{prop.state_region?`, ${prop.state_region}`:''} · {prop.country}{prop.postcode?` · ${prop.postcode}`:''}</div>
+          </div>
+          <div style={{textAlign:'right',flexShrink:0}}>
+            {prop.guide_price ? <div style={{fontSize:16,fontWeight:600,color:'var(--purple)'}}>{sym}{prop.guide_price.toLocaleString()}</div> : null}
+            <Badge status={prop.status} />
+          </div>
+        </div>
+        <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:14,borderTop:'1px solid var(--border)',paddingTop:12}}>
+          {tabs.map(t => (
+            <button key={t.id} onClick={()=>setPage(t.id)}
+              style={{padding:'6px 13px',borderRadius:'var(--radius-sm)',border:'none',cursor:'pointer',fontSize:13,transition:'all .15s',
+                background: page===t.id?'var(--purple)':'var(--light)', color: page===t.id?'#fff':'var(--mid)', fontWeight: page===t.id?500:400}}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function App() {
   const { user, loading } = useAuth();
   const [page, setPage] = React.useState('dashboard');
@@ -1732,10 +1773,15 @@ function App() {
     admin:<AdminView/>
   };
 
+  const content = views[page] || <DashboardView openProperty={openProperty}/>;
+  const inFolder = activeProperty && ['viewings','feedback','offers','documents','aml','photography'].includes(page);
+
   return (
     <PropertyContext.Provider value={{ prop: activeProperty, openProperty }}>
       <DashboardLayout currentPage={page} setPage={setPage} activeProperty={activeProperty} closeProperty={closeProperty}>
-        {views[page] || <DashboardView openProperty={openProperty}/>}
+        {inFolder
+          ? <PropertyShell prop={activeProperty} page={page} setPage={setPage} onBack={closeProperty}>{content}</PropertyShell>
+          : content}
       </DashboardLayout>
     </PropertyContext.Provider>
   );
