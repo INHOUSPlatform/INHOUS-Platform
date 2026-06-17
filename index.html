@@ -844,6 +844,65 @@ function FeedbackView({ propId }) {
   );
 }
 
+function OfferDocsCard({ propId }) {
+  const { authApi } = useAuth();
+  const [docs, setDocs] = React.useState([]);
+  const [docType, setDocType] = React.useState('proof_of_funds');
+  const [uploading, setUploading] = React.useState(false);
+  const [msg, setMsg] = React.useState(null);
+  const fileRef = React.useRef();
+  const TYPES = [['proof_of_funds','Proof of funds'],['aml_buyer','Buyer AML / ID'],['other','Other supporting document']];
+  const labelOf = Object.fromEntries(TYPES);
+
+  const load = () => {
+    authApi('GET', `/properties/${propId}/documents`)
+      .then(d => setDocs((d||[]).filter(x => ['proof_of_funds','aml_buyer'].includes(x.doc_type))))
+      .catch(()=>{});
+  };
+  React.useEffect(() => { if (propId) load(); }, [propId]);
+
+  const onFile = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    setUploading(true); setMsg(null);
+    const fd = new FormData(); fd.append('file', file); fd.append('doc_type', docType);
+    const tok = localStorage.getItem('inhous_token');
+    try {
+      const res = await fetch(`${API}/properties/${propId}/documents`, { method:'POST', headers: tok?{Authorization:`Bearer ${tok}`}:{}, body: fd });
+      if (!res.ok) throw new Error((await res.json().catch(()=>({}))).error || `Upload failed (${res.status})`);
+      setMsg({ ok:true, text:`${labelOf[docType]} uploaded and shared securely with the broker.` });
+      load();
+    } catch (err) { setMsg({ ok:false, text: err.message }); }
+    finally { setUploading(false); if (fileRef.current) fileRef.current.value = ''; }
+  };
+
+  return (
+    <div className="card" style={{marginBottom:16}}>
+      <h3 style={{fontSize:15,marginBottom:4}}>Offer documents — proof of funds & AML</h3>
+      <div style={{fontSize:12,color:'var(--mid)',marginBottom:12}}>Upload proof of funds and AML / ID for your buyer. These are shared securely with the broker and solicitors — other agents cannot see them.</div>
+      <div style={{display:'flex',gap:10,alignItems:'flex-end'}}>
+        <div className="field" style={{flex:1,marginBottom:0}}>
+          <label>Document type</label>
+          <select value={docType} onChange={e=>setDocType(e.target.value)}>{TYPES.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
+        </div>
+        <button type="button" className="btn btn-primary btn-sm" onClick={()=>fileRef.current?.click()} disabled={uploading}>{uploading?'Uploading…':'Choose file'}</button>
+        <input ref={fileRef} type="file" style={{display:'none'}} onChange={onFile} />
+      </div>
+      {msg && <div style={{marginTop:12}}><InfoBox type={msg.ok?'green':'red'} label={msg.ok?'Uploaded':'Error'}>{msg.text}</InfoBox></div>}
+      {docs.length > 0 && (
+        <div style={{marginTop:14}}>
+          <div style={{fontSize:11,fontWeight:500,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:6}}>Uploaded</div>
+          {docs.map(d => (
+            <div key={d.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'4px 0',borderBottom:'1px solid var(--border)'}}>
+              <span>{d.original_filename||d.filename} <span className="badge badge-gray" style={{marginLeft:6}}>{labelOf[d.doc_type]||d.doc_type}</span></span>
+              <span style={{color:'var(--mid)'}}>{d.created_at?.split('T')[0]}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OffersView({ propId }) {
   const { authApi, user } = useAuth();
   const { prop } = useProperty();
@@ -852,7 +911,7 @@ function OffersView({ propId }) {
   const [offers, setOffers] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [showForm, setShowForm] = React.useState(false);
-  const [form, setForm] = React.useState({ amount:'', buyer_full_name:'', purchase_method:'cash', chain_status:'chain_free', conditions:'', buyer_solicitor_firm:'', buyer_solicitor_name:'', buyer_solicitor_email:'', buyer_notes:'' });
+  const [form, setForm] = React.useState({ offer_date:'', amount:'', buyer_full_name:'', reason_for_purchase:'', properties_viewed:'', property_to_sell:'', purchase_method:'cash', financial_provider:'', chain_status:'chain_free', proposed_exchange:'', proposed_completion:'', buyer_solicitor_firm:'', buyer_solicitor_name:'', buyer_solicitor_email:'', conditions:'', agent_notes:'' });
   const [error, setError] = React.useState('');
   const [saving, setSaving] = React.useState(false);
 
@@ -907,14 +966,24 @@ function OffersView({ propId }) {
           <h3 style={{marginBottom:14,fontSize:16}}>Log an offer</h3>
           <form onSubmit={submitOffer}>
             <div className="grid2">
-              <div className="field"><label>Offer amount *</label><input type="number" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} placeholder="e.g. 5250000" required /></div>
-              <div className="field"><label>Buyer full name *</label><input value={form.buyer_full_name} onChange={e=>setForm({...form,buyer_full_name:e.target.value})} placeholder="As on contract" required /></div>
+              <div className="field"><label>Date</label><input type="date" value={form.offer_date} onChange={e=>setForm({...form,offer_date:e.target.value})} /></div>
+              <div className="field"><label>Offer amount *</label><input type="number" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} placeholder="e.g. 13500000" required /></div>
+              <div className="field"><label>Client buying *</label><input value={form.buyer_full_name} onChange={e=>setForm({...form,buyer_full_name:e.target.value})} placeholder="Buyer name as on contract" required /></div>
+              <div className="field"><label>Reason for buying</label><input value={form.reason_for_purchase} onChange={e=>setForm({...form,reason_for_purchase:e.target.value})} placeholder="e.g. Family home" /></div>
+              <div className="field"><label>Number of properties viewed</label><input value={form.properties_viewed} onChange={e=>setForm({...form,properties_viewed:e.target.value})} placeholder="e.g. 5-7" /></div>
+              <div className="field"><label>Property to sell</label><input value={form.property_to_sell} onChange={e=>setForm({...form,property_to_sell:e.target.value})} placeholder="e.g. No / Yes — under offer" /></div>
               <div className="field"><label>Purchase method</label><select value={form.purchase_method} onChange={e=>setForm({...form,purchase_method:e.target.value})}><option value="cash">Cash buyer</option><option value="mortgage">Mortgage</option><option value="part">Part cash / part mortgage</option></select></div>
+              <div className="field"><label>Lending vs cash position</label><input value={form.financial_provider} onChange={e=>setForm({...form,financial_provider:e.target.value})} placeholder="e.g. Cash, exploring finance — not conditional on mortgage" /></div>
               <div className="field"><label>Chain status</label><select value={form.chain_status} onChange={e=>setForm({...form,chain_status:e.target.value})}><option value="chain_free">Chain free</option><option value="property_to_sell_uo">Property to sell — under offer</option><option value="property_to_sell">Property to sell — not yet listed</option><option value="in_rental">In rental</option></select></div>
-              <div className="field"><label>Buyer solicitor firm</label><input value={form.buyer_solicitor_firm} onChange={e=>setForm({...form,buyer_solicitor_firm:e.target.value})} placeholder="e.g. Thompson & Hart LLP" /></div>
+              <div className="field"><label>Proposed exchange date</label><input value={form.proposed_exchange} onChange={e=>setForm({...form,proposed_exchange:e.target.value})} placeholder="e.g. Flexible to suit vendor" /></div>
+              <div className="field"><label>Completion date</label><input value={form.proposed_completion} onChange={e=>setForm({...form,proposed_completion:e.target.value})} placeholder="e.g. October" /></div>
+              <div className="field"><label>Buyer solicitor firm</label><input value={form.buyer_solicitor_firm} onChange={e=>setForm({...form,buyer_solicitor_firm:e.target.value})} placeholder="e.g. TBC" /></div>
               <div className="field"><label>Buyer solicitor name</label><input value={form.buyer_solicitor_name} onChange={e=>setForm({...form,buyer_solicitor_name:e.target.value})} placeholder="e.g. Sarah Thompson" /></div>
+              <div className="field"><label>Buyer solicitor email</label><input type="email" value={form.buyer_solicitor_email} onChange={e=>setForm({...form,buyer_solicitor_email:e.target.value})} /></div>
             </div>
-            <div className="field"><label>Conditions attached</label><textarea value={form.conditions} onChange={e=>setForm({...form,conditions:e.target.value})} placeholder="e.g. Subject to satisfactory survey. None stated." style={{minHeight:60}} /></div>
+            <div className="field"><label>Conditions attached</label><textarea value={form.conditions} onChange={e=>setForm({...form,conditions:e.target.value})} placeholder="e.g. Vendors to include as much furnishing as possible in the purchase." style={{minHeight:60}} /></div>
+            <div className="field"><label>Comments</label><textarea value={form.agent_notes} onChange={e=>setForm({...form,agent_notes:e.target.value})} placeholder="Notes for the broker / vendor — e.g. itemised list of inclusions requested" style={{minHeight:60}} /></div>
+            <OfferDocsCard propId={selectedProp} />
             {error && <div className="error-text" style={{marginBottom:10}}>{error}</div>}
             <div style={{display:'flex',gap:8}}>
               <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>{saving?'Submitting…':'Submit offer'}</button>
@@ -943,7 +1012,20 @@ function OffersView({ propId }) {
                 {offer.chain_status && <span className={`badge ${offer.chain_status==='chain_free'?'badge-green':'badge-amber'}`}>{offer.chain_status.replace(/_/g,' ')}</span>}
                 {offer.proof_of_funds_status && <span className={`badge ${offer.proof_of_funds_status==='confirmed'?'badge-green':offer.proof_of_funds_status==='received'?'badge-green':'badge-gray'}`}>Funds: {offer.proof_of_funds_status.replace(/_/g,' ')}</span>}
               </div>
-              {offer.conditions && <div style={{fontSize:12,color:'var(--mid)',marginBottom:8}}>Conditions: {offer.conditions}</div>}
+              {['broker','vendor'].includes(user?.role) && (offer.reason_for_purchase||offer.properties_viewed||offer.property_to_sell||offer.financial_provider||offer.proposed_exchange||offer.proposed_completion||offer.buyer_solicitor_firm||offer.offer_date) && (
+                <div style={{fontSize:12,color:'var(--mid)',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'3px 16px',marginBottom:8,paddingTop:6,borderTop:'1px solid var(--border)'}}>
+                  {offer.offer_date && <div><b>Date:</b> {offer.offer_date}</div>}
+                  {offer.reason_for_purchase && <div><b>Reason:</b> {offer.reason_for_purchase}</div>}
+                  {offer.properties_viewed && <div><b>Properties viewed:</b> {offer.properties_viewed}</div>}
+                  {offer.property_to_sell && <div><b>Property to sell:</b> {offer.property_to_sell}</div>}
+                  {offer.financial_provider && <div><b>Funding:</b> {offer.financial_provider}</div>}
+                  {offer.proposed_exchange && <div><b>Exchange:</b> {offer.proposed_exchange}</div>}
+                  {offer.proposed_completion && <div><b>Completion:</b> {offer.proposed_completion}</div>}
+                  {offer.buyer_solicitor_firm && <div><b>Solicitor:</b> {offer.buyer_solicitor_firm}{offer.buyer_solicitor_name?` — ${offer.buyer_solicitor_name}`:''}</div>}
+                </div>
+              )}
+              {offer.conditions && <div style={{fontSize:12,color:'var(--mid)',marginBottom:8}}><b>Conditions:</b> {offer.conditions}</div>}
+              {offer.agent_notes && <div style={{fontSize:12,color:'var(--mid)',marginBottom:8}}><b>Comments:</b> {offer.agent_notes}</div>}
               {['broker','vendor'].includes(user?.role) && offer.status==='submitted' && (
                 <div style={{display:'flex',gap:6,marginTop:8}}>
                   <button className="btn btn-sm btn-green" onClick={()=>doAction(offer.id,'accept')}>Accept offer</button>

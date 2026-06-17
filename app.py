@@ -737,13 +737,15 @@ def get_offers(property_id):
                   o.mortgage_percent, o.chain_status, o.conditions, o.proposed_exchange,
                   o.proposed_completion, o.proof_of_funds_status, o.buyer_aml_status,
                   o.counter_amount, o.agency_name, o.buyer_solicitor_firm,
-                  o.accepted_at, o.declined_at, o.valid_until'''
+                  o.accepted_at, o.declined_at, o.valid_until,
+                  o.offer_date, o.reason_for_purchase, o.properties_viewed'''
         if g.role == 'broker':
             cols += ''', o.negotiator_name, o.broker_notes,
                        o.agent_notes, o.buyer_email, o.buyer_phone,
                        o.buyer_profession, o.buyer_nationality, o.buyer_address,
                        o.financial_provider, o.property_to_sell, o.competing_properties,
-                       o.buyer_solicitor_name, o.buyer_solicitor_email, o.buyer_solicitor_phone'''
+                       o.buyer_solicitor_name, o.buyer_solicitor_email, o.buyer_solicitor_phone,
+                       o.inhous_fee, o.time_looking'''
         offers = rows_to_list(db.execute(f'SELECT {cols} FROM offers o WHERE o.property_id=? ORDER BY o.amount DESC', (property_id,)).fetchall())
     else:
         # Agent sees own submission status only
@@ -784,8 +786,9 @@ def submit_offer(property_id):
         financial_provider, proof_of_funds_status, chain_status, property_to_sell,
         proposed_exchange, proposed_completion, competing_properties,
         buyer_solicitor_firm, buyer_solicitor_name, buyer_solicitor_email, buyer_solicitor_phone,
-        buyer_aml_status, conditions, valid_from, valid_until, broker_notes, agent_notes
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+        buyer_aml_status, conditions, valid_from, valid_until, broker_notes, agent_notes,
+        inhous_fee, offer_date
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
         property_id, g.user_id, agency_name, negotiator_name, amount,
         data['buyer_full_name'], data.get('buyer_name_on_contract'), data.get('buyer_email'),
         data.get('buyer_phone'), data.get('buyer_address'), data.get('buyer_profession'),
@@ -799,7 +802,8 @@ def submit_offer(property_id):
         data.get('buyer_solicitor_name'), data.get('buyer_solicitor_email'),
         data.get('buyer_solicitor_phone'), data.get('buyer_aml_status','not_started'),
         data.get('conditions'), data.get('valid_from'), data.get('valid_until'),
-        data.get('broker_notes') if g.role == 'broker' else None, data.get('agent_notes')
+        data.get('broker_notes') if g.role == 'broker' else None, data.get('agent_notes'),
+        data.get('inhous_fee'), data.get('offer_date')
     ))
     offer_id = c.lastrowid
     # Notify broker and vendor
@@ -957,18 +961,20 @@ def get_documents(property_id):
     allowed = role_visible.get(g.role)
     if allowed:
         placeholders = ','.join('?' for _ in allowed)
+        # Role-visible doc types OR any document the user uploaded themselves
+        # (so an agent/buyer can see their own proof-of-funds / AML uploads back).
         docs = rows_to_list(db.execute(
-            f"SELECT d.*, u.full_name as uploaded_by_name FROM documents d LEFT JOIN users u ON d.uploaded_by=u.id WHERE d.property_id=? AND d.doc_type IN ({placeholders}) ORDER BY d.created_at DESC",
-            (property_id, *allowed)
+            f"SELECT d.*, u.full_name as uploaded_by_name FROM documents d LEFT JOIN users u ON d.uploaded_by=u.id WHERE d.property_id=? AND (d.doc_type IN ({placeholders}) OR d.uploaded_by=?) ORDER BY d.created_at DESC",
+            (property_id, *allowed, g.user_id)
         ).fetchall())
     else:
         docs = rows_to_list(db.execute(
             'SELECT d.*, u.full_name as uploaded_by_name FROM documents d LEFT JOIN users u ON d.uploaded_by=u.id WHERE d.property_id=? ORDER BY d.created_at DESC',
             (property_id,)
         ).fetchall())
-    # Agent isolation: agents only see their own branded brochure, not master
+    # Agent isolation: agents never see the master brochure (but keep their own uploads)
     if g.role == 'agent':
-        docs = [d for d in docs if not (d['doc_type'] == 'brochure')]
+        docs = [d for d in docs if not (d['doc_type'] == 'brochure' and d['uploaded_by'] != g.user_id)]
     db.close()
     return jsonify(docs)
 

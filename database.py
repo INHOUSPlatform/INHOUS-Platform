@@ -289,6 +289,8 @@ def init_db():
         valid_until DATE,
         broker_notes TEXT,
         agent_notes TEXT,
+        inhous_fee TEXT,
+        offer_date TEXT,
         status TEXT NOT NULL DEFAULT 'submitted' CHECK(status IN (
             'submitted','under_review','countered','accepted','declined','withdrawn'
         )),
@@ -327,12 +329,17 @@ def init_db():
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
 
-    # ── i18n migration: add international columns to pre-existing properties tables ──
-    for col, ddl in (("state_region", "TEXT"), ("currency", "TEXT DEFAULT 'GBP'")):
-        try:
-            c.execute(f"ALTER TABLE properties ADD COLUMN {col} {ddl}")
-        except sqlite3.OperationalError:
-            pass  # column already exists
+    # ── Schema migrations: add new columns to pre-existing tables (idempotent) ──
+    migrations = {
+        'properties': [("state_region", "TEXT"), ("currency", "TEXT DEFAULT 'GBP'")],
+        'offers': [("inhous_fee", "TEXT"), ("offer_date", "TEXT")],
+    }
+    for table, cols in migrations.items():
+        for col, ddl in cols:
+            try:
+                c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+            except sqlite3.OperationalError:
+                pass  # column already exists
 
     conn.commit()
     conn.close()
