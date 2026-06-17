@@ -40,8 +40,10 @@ def init_db():
         city TEXT NOT NULL,
         postcode TEXT NOT NULL,
         country TEXT DEFAULT 'United Kingdom',
+        state_region TEXT,
         tenure TEXT CHECK(tenure IN ('Freehold','Leasehold','Share of Freehold')),
         guide_price INTEGER,
+        currency TEXT DEFAULT 'GBP',
         bedrooms INTEGER,
         floor_area_sqft INTEGER,
         year_built INTEGER,
@@ -324,6 +326,13 @@ def init_db():
         ip_address TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
+
+    # ── i18n migration: add international columns to pre-existing properties tables ──
+    for col, ddl in (("state_region", "TEXT"), ("currency", "TEXT DEFAULT 'GBP'")):
+        try:
+            c.execute(f"ALTER TABLE properties ADD COLUMN {col} {ddl}")
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
     conn.commit()
     conn.close()

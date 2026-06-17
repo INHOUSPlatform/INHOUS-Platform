@@ -28,6 +28,35 @@ def row_to_dict(row):
 def rows_to_list(rows):
     return [dict(r) for r in rows]
 
+# ── INTERNATIONALISATION HELPERS ──────────────────────────────────────────────
+CURRENCY_SYMBOLS = {'GBP': '£', 'EUR': '€', 'USD': '$', 'CHF': 'CHF ', 'AED': 'AED '}
+COUNTRY_CURRENCY = {
+    'United Kingdom': 'GBP', 'Ireland': 'EUR', 'Portugal': 'EUR', 'Spain': 'EUR',
+    'France': 'EUR', 'Switzerland': 'CHF', 'United Arab Emirates': 'AED',
+    'United States': 'USD', 'Italy': 'EUR', 'Greece': 'EUR', 'Monaco': 'EUR',
+    'Luxembourg': 'EUR', 'Belgium': 'EUR', 'Netherlands': 'EUR', 'Germany': 'EUR',
+    'Austria': 'EUR',
+}
+
+def fmt_money(amount, currency='GBP'):
+    """Currency-aware money formatting for notifications/audit text."""
+    try:
+        amount = int(amount)
+    except (TypeError, ValueError):
+        return str(amount)
+    return f"{CURRENCY_SYMBOLS.get(currency or 'GBP', '')}{amount:,}"
+
+def normalize_postcode(country, postcode):
+    """Trim + upper-case a postcode. Permissive: every country's format is accepted
+    (UK postcodes, Irish Eircodes, EU postal codes, US ZIPs, etc.) — never blocks."""
+    return (postcode or '').strip().upper()
+
+def to_int_or_none(value):
+    try:
+        return int(value) if value not in (None, '') else None
+    except (TypeError, ValueError):
+        return None
+
 def notify(db, user_id, property_id, type_, title, message='', action_url=''):
     db.execute(
         'INSERT INTO notifications (user_id,property_id,type,title,message,action_url) VALUES (?,?,?,?,?,?)',
@@ -149,16 +178,20 @@ def create_property():
     for f in required:
         if not data.get(f):
             return jsonify({'error': f'{f} is required'}), 400
+    country = data.get('country') or 'United Kingdom'
+    currency = data.get('currency') or COUNTRY_CURRENCY.get(country, 'GBP')
+    postcode = normalize_postcode(country, data.get('postcode'))
+    guide_price = to_int_or_none(data.get('guide_price'))
     db = get_db()
-    c = db.execute('''INSERT INTO properties 
-        (address_line1,address_line2,city,postcode,country,tenure,guide_price,
+    c = db.execute('''INSERT INTO properties
+        (address_line1,address_line2,city,state_region,postcode,country,currency,tenure,guide_price,
          bedrooms,floor_area_sqft,year_built,epc_rating,epc_cert_number,
          epc_valid_until,sale_mode,broker_id,notes)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
         data.get('address_line1'), data.get('address_line2'),
-        data.get('city'), data.get('postcode'),
-        data.get('country', 'United Kingdom'),
-        data.get('tenure'), data.get('guide_price'),
+        data.get('city'), data.get('state_region'), postcode,
+        country, currency,
+        data.get('tenure'), guide_price,
         data.get('bedrooms'), data.get('floor_area_sqft'),
         data.get('year_built'), data.get('epc_rating'),
         data.get('epc_cert_number'), data.get('epc_valid_until'),
@@ -167,9 +200,9 @@ def create_property():
     ))
     prop_id = c.lastrowid
     # Log launch price
-    if data.get('guide_price'):
+    if guide_price:
         db.execute('INSERT INTO price_log (property_id,price,event_type,logged_by) VALUES (?,?,?,?)',
-                   (prop_id, data['guide_price'], 'launch', g.user_id))
+                   (prop_id, guide_price, 'launch', g.user_id))
     # Create photography booking record
     db.execute('INSERT INTO photography_bookings (property_id,booking_type) VALUES (?,?)',
                (prop_id, 'photography'))
@@ -214,18 +247,24 @@ def update_property(property_id):
     if not prop:
         db.close()
         return jsonify({'error': 'Property not found'}), 404
-    allowed = ['address_line1','address_line2','city','postcode','tenure','guide_price',
-               'bedrooms','floor_area_sqft','year_built','epc_rating','epc_cert_number',
-               'epc_valid_until','sale_mode','status','notes']
+    allowed = ['address_line1','address_line2','city','state_region','postcode','country','currency',
+               'tenure','guide_price','bedrooms','floor_area_sqft','year_built','epc_rating',
+               'epc_cert_number','epc_valid_until','sale_mode','status','notes']
     updates = {k: v for k, v in data.items() if k in allowed}
     if not updates:
         db.close()
         return jsonify({'error': 'No valid fields to update'}), 400
-    # Log price change
-    if 'guide_price' in updates and updates['guide_price'] != prop['guide_price']:
-        event = 'reduction' if updates['guide_price'] < prop['guide_price'] else 'increase'
-        db.execute('INSERT INTO price_log (property_id,price,event_type,notes,logged_by) VALUES (?,?,?,?,?)',
-                   (property_id, updates['guide_price'], event, data.get('price_notes'), g.user_id))
+    if 'postcode' in updates:
+        updates['postcode'] = normalize_postcode(updates.get('country') or prop['country'], updates['postcode'])
+    # Log price change (guard against NULL/string guide_price)
+    if 'guide_price' in updates:
+        new_gp = to_int_or_none(updates['guide_price'])
+        updates['guide_price'] = new_gp
+        old_gp = prop['guide_price']
+        if new_gp is not None and new_gp != old_gp:
+            event = 'increase' if old_gp is None else ('reduction' if new_gp < old_gp else 'increase')
+            db.execute('INSERT INTO price_log (property_id,price,event_type,notes,logged_by) VALUES (?,?,?,?,?)',
+                       (property_id, new_gp, event, data.get('price_notes'), g.user_id))
     set_clause = ', '.join(f'{k}=?' for k in updates)
     db.execute(f'UPDATE properties SET {set_clause}, updated_at=CURRENT_TIMESTAMP WHERE id=?',
                list(updates.values()) + [property_id])
@@ -722,6 +761,9 @@ def submit_offer(property_id):
     data = request.get_json()
     if not data.get('amount') or not data.get('buyer_full_name'):
         return jsonify({'error': 'Amount and buyer name required'}), 400
+    amount = to_int_or_none(data.get('amount'))
+    if amount is None:
+        return jsonify({'error': 'Amount must be a number'}), 400
     db = get_db()
     # Get negotiator details if agent
     if g.role == 'agent':
@@ -744,7 +786,7 @@ def submit_offer(property_id):
         buyer_solicitor_firm, buyer_solicitor_name, buyer_solicitor_email, buyer_solicitor_phone,
         buyer_aml_status, conditions, valid_from, valid_until, broker_notes, agent_notes
     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
-        property_id, g.user_id, agency_name, negotiator_name, data['amount'],
+        property_id, g.user_id, agency_name, negotiator_name, amount,
         data['buyer_full_name'], data.get('buyer_name_on_contract'), data.get('buyer_email'),
         data.get('buyer_phone'), data.get('buyer_address'), data.get('buyer_profession'),
         data.get('buyer_nationality'), data.get('buyer_type'), data.get('reason_for_purchase'),
@@ -761,16 +803,17 @@ def submit_offer(property_id):
     ))
     offer_id = c.lastrowid
     # Notify broker and vendor
-    prop = db.execute('SELECT broker_id, address_line1 FROM properties WHERE id=?', (property_id,)).fetchone()
+    prop = db.execute('SELECT broker_id, address_line1, currency FROM properties WHERE id=?', (property_id,)).fetchone()
+    money = fmt_money(amount, prop['currency'])
     notify(db, prop['broker_id'], property_id, 'offer_received',
-           f"New offer — £{data['amount']:,} from {agency_name}",
+           f"New offer — {money} from {agency_name}",
            f"Buyer: {data['buyer_full_name']} · {data.get('purchase_method','').capitalize()}")
     vendor = db.execute("SELECT user_id FROM property_access WHERE property_id=? AND role='vendor'", (property_id,)).fetchone()
     if vendor:
         notify(db, vendor['user_id'], property_id, 'offer_received',
-               f"New offer received — £{data['amount']:,}",
+               f"New offer received — {money}",
                f"From {agency_name} · {data.get('purchase_method','').capitalize()} buyer")
-    audit(db, property_id, g.user_id, 'offer_submitted', 'offer', offer_id, f"£{data['amount']:,}")
+    audit(db, property_id, g.user_id, 'offer_submitted', 'offer', offer_id, money)
     db.commit()
     db.close()
     return jsonify({'id': offer_id, 'message': 'Offer submitted successfully'}), 201
@@ -787,12 +830,14 @@ def offer_action(property_id, offer_id):
     if not offer:
         db.close()
         return jsonify({'error': 'Offer not found'}), 404
+    cur_row = db.execute('SELECT currency FROM properties WHERE id=?', (property_id,)).fetchone()
+    currency = cur_row['currency'] if cur_row else 'GBP'
     status_map = {'accept':'accepted','decline':'declined','counter':'countered'}
     updates = {'status': status_map[action]}
     if action == 'accept':
         updates['accepted_at'] = datetime.datetime.utcnow().isoformat()
         # Trigger post-acceptance workflow
-        _trigger_acceptance_workflow(db, property_id, offer_id, offer)
+        _trigger_acceptance_workflow(db, property_id, offer_id, offer, currency)
         # Update property status
         db.execute("UPDATE properties SET status='under_offer' WHERE id=?", (property_id,))
     elif action == 'decline':
@@ -806,15 +851,16 @@ def offer_action(property_id, offer_id):
                list(updates.values()) + [offer_id])
     # Notify the agent who submitted
     notify(db, offer['submitted_by'], property_id, f'offer_{action}d',
-           f"Offer {status_map[action]} — £{offer['amount']:,}",
+           f"Offer {status_map[action]} — {fmt_money(offer['amount'], currency)}",
            data.get('counter_notes') or data.get('reason',''))
     audit(db, property_id, g.user_id, f'offer_{action}d', 'offer', offer_id)
     db.commit()
     db.close()
     return jsonify({'message': f'Offer {action}ed successfully'})
 
-def _trigger_acceptance_workflow(db, property_id, offer_id, offer):
+def _trigger_acceptance_workflow(db, property_id, offer_id, offer, currency='GBP'):
     prop = db.execute('SELECT broker_id, address_line1, city FROM properties WHERE id=?', (property_id,)).fetchone()
+    accepted = fmt_money(offer['amount'], currency)
     # 1. Buyer solicitor invited (notification to broker to send invite)
     notify(db, prop['broker_id'], property_id, 'action_required',
            'Send invite — buyer solicitor',
@@ -824,12 +870,12 @@ def _trigger_acceptance_workflow(db, property_id, offer_id, offer):
     if vendor_sol:
         notify(db, vendor_sol['user_id'], property_id, 'offer_accepted',
                'Offer accepted — begin conveyancing preparation',
-               f"Accepted offer: £{offer['amount']:,}. Please begin conveyancing prep for {prop['address_line1']}.")
+               f"Accepted offer: {accepted}. Please begin conveyancing prep for {prop['address_line1']}.")
     # 3. Vendor notified
     vendor = db.execute("SELECT user_id FROM property_access WHERE property_id=? AND role='vendor'", (property_id,)).fetchone()
     if vendor:
         notify(db, vendor['user_id'], property_id, 'offer_accepted',
-               f"Offer accepted — £{offer['amount']:,}",
+               f"Offer accepted — {accepted}",
                "Your solicitor has been notified to begin conveyancing preparation.")
     # 4. Broker action items
     notify(db, prop['broker_id'], property_id, 'action_required',
@@ -864,7 +910,9 @@ def get_aml(property_id):
 @app.route('/api/properties/<int:property_id>/aml', methods=['POST'])
 @require_role('broker', 'vendor_solicitor', 'buyer_solicitor')
 def create_aml(property_id):
-    data = request.get_json()
+    data = request.get_json() or {}
+    if data.get('party_type') not in ('vendor', 'buyer') or not data.get('person_name'):
+        return jsonify({'error': "party_type (must be 'vendor' or 'buyer') and person_name are required"}), 400
     db = get_db()
     c = db.execute('''INSERT INTO aml_records (property_id, party_type, person_name, dob, nationality, status)
                       VALUES (?,?,?,?,?,?)''', (

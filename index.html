@@ -492,7 +492,7 @@ function PropertiesView({ openProperty }) {
                 <Badge status={p.status} />
               </div>
               <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:10}}>
-                {p.guide_price && <span className="badge badge-purple">{p.currency||'GBP'==='GBP'?'£':p.currency==='EUR'?'€':p.currency==='USD'?'$':p.currency==='CHF'?'CHF ':p.currency==='AED'?'AED ':''}{(p.guide_price/1000000).toFixed(2)}m</span>}
+                {p.guide_price && <span className="badge badge-purple">{({GBP:'£',EUR:'€',USD:'$',CHF:'CHF ',AED:'AED '}[p.currency||'GBP']||'£')}{(p.guide_price/1000000).toFixed(2)}m</span>}
                 <Badge status={p.sale_mode} />
                 {p.bedrooms && <span className="badge badge-gray">{p.bedrooms} bed</span>}
                 {p.floor_area_sqft && <span className="badge badge-gray">{p.floor_area_sqft.toLocaleString()} sq ft</span>}
