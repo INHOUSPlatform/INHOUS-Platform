@@ -1168,6 +1168,7 @@ function PhotographyView({ propId }) {
   const [loading, setLoading] = React.useState(false);
   const [edits, setEdits] = React.useState({});
   const [saving, setSaving] = React.useState(null);
+  const [msg, setMsg] = React.useState(null); // { ok: boolean, text: string }
 
   React.useEffect(() => {
     authApi('GET', '/properties').then(ps => {
@@ -1184,10 +1185,22 @@ function PhotographyView({ propId }) {
   };
 
   const save = async (booking) => {
-    setSaving(booking.id);
+    setMsg(null);
     const data = edits[booking.id] || {};
-    await authApi('PATCH', `/properties/${selectedProp}/photography/${booking.id}`, data).catch(()=>{});
-    setSaving(null); load(selectedProp);
+    if (!data.preferred_date && !booking.preferred_date) {
+      setMsg({ ok:false, text:'Please choose a preferred date before saving.' });
+      return;
+    }
+    setSaving(booking.id);
+    try {
+      await authApi('PATCH', `/properties/${selectedProp}/photography/${booking.id}`, data);
+      await load(selectedProp);
+      setMsg({ ok:true, text:'Saved — preferred date confirmed. The shoot is now booked and the listing moves to "photography booked".' });
+    } catch (err) {
+      setMsg({ ok:false, text: err.message || 'Could not save. Please try again.' });
+    } finally {
+      setSaving(null);
+    }
   };
 
   const setEdit = (id, key, val) => setEdits(prev => ({...prev, [id]: {...(prev[id]||{}), [key]: val}}));
@@ -1198,7 +1211,7 @@ function PhotographyView({ propId }) {
     <div>
       <PageHeader title="Photography & Floorplan" subtitle="Book and manage property photography" />
       <InfoBox type="gold" label="Important">
-        The property listing cannot go live until photography is approved and the floorplan is uploaded. The vendor selects preferred dates — please allow at least 7 days for preparation.
+        The property listing cannot go live until photography is approved and the floorplan is uploaded. The vendor selects preferred dates — allowing a few days for preparation is recommended.
       </InfoBox>
       {properties.length > 1 && (
         <div className="field" style={{marginBottom:16}}><label>Property</label>
@@ -1219,7 +1232,7 @@ function PhotographyView({ propId }) {
             <InfoBox type="amber" label="Note">Photos and floorplan are booked as one appointment — pick a single date and time below.</InfoBox>
             <div className="grid2">
               <div className="field"><label>Preferred date</label>
-                <input type="date" defaultValue={photo.preferred_date||''} min={new Date(Date.now()+7*86400000).toISOString().split('T')[0]}
+                <input type="date" defaultValue={photo.preferred_date||''} min={new Date().toISOString().split('T')[0]}
                   onChange={e=>setEdit(photo.id,'preferred_date',e.target.value)} />
               </div>
               <div className="field"><label>Preferred time</label>
@@ -1236,6 +1249,7 @@ function PhotographyView({ propId }) {
             <div className="field"><label>{user?.role==='vendor'?'Preparation notes':'Brief for photographer'}</label>
               <textarea defaultValue={user?.role==='vendor'?photo.vendor_notes||'':photo.broker_brief||''} onChange={e=>setEdit(photo.id,user?.role==='vendor'?'vendor_notes':'broker_brief',e.target.value)} placeholder={user?.role==='vendor'?'Rooms ready, areas to focus on, access instructions…':'Key shots required, rooms to prioritise, floorplan notes…'} style={{minHeight:70}} />
             </div>
+            {msg && <div style={{marginBottom:12}}><InfoBox type={msg.ok?'green':'red'} label={msg.ok?'Saved':'Error'}>{msg.text}</InfoBox></div>}
             <button className="btn btn-primary btn-sm" onClick={()=>save(photo)} disabled={saving===photo.id}>{saving===photo.id?'Saving…':'Save & confirm date'}</button>
           </div>
         );
