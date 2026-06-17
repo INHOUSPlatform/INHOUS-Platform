@@ -1,0 +1,16 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Runtime logs
+server.out.log
+server.err.log
+*.log
+
+# SQLite write-ahead-log / shared-memory sidecar files
+inhous.db-wal
+inhous.db-shm
+
+# Uploaded documents (runtime)
+uploads/

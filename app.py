@@ -700,7 +700,7 @@ def get_offers(property_id):
                   o.counter_amount, o.agency_name, o.buyer_solicitor_firm,
                   o.accepted_at, o.declined_at, o.valid_until'''
         if g.role == 'broker':
-            cols += ''', o.negotiator_name, o.negotiator_email, o.broker_notes,
+            cols += ''', o.negotiator_name, o.broker_notes,
                        o.agent_notes, o.buyer_email, o.buyer_phone,
                        o.buyer_profession, o.buyer_nationality, o.buyer_address,
                        o.financial_provider, o.property_to_sell, o.competing_properties,
@@ -834,7 +834,7 @@ def _trigger_acceptance_workflow(db, property_id, offer_id, offer):
     # 4. Broker action items
     notify(db, prop['broker_id'], property_id, 'action_required',
            'Contact bank/lender — proof of funds',
-           "Request proof of funds from " + (offer.get('financial_provider') or "buyer's bank"))
+           "Request proof of funds from " + (offer['financial_provider'] or "buyer's bank"))
     notify(db, prop['broker_id'], property_id, 'action_required',
            'Send removal company referrals',
            'Trigger removal company quote requests to vendor and buyer')
