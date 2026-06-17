@@ -1216,7 +1216,7 @@ function PhotographyView({ propId }) {
               <h3 style={{fontSize:16}}>Photography & Floorplan shoot</h3>
               <Badge status={photo.status} />
             </div>
-            <InfoBox type="amber" label="Note">Photos and floorplan are booked as one appointment. Allow at least 7 days for preparation.</InfoBox>
+            <InfoBox type="amber" label="Note">Photos and floorplan are booked as one appointment — pick a single date and time below.</InfoBox>
             <div className="grid2">
               <div className="field"><label>Preferred date</label>
                 <input type="date" defaultValue={photo.preferred_date||''} min={new Date(Date.now()+7*86400000).toISOString().split('T')[0]}
