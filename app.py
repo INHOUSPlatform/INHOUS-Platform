@@ -1005,6 +1005,118 @@ def upload_document(property_id):
     db.close()
     return jsonify({'id': doc_id, 'message': 'Document uploaded'}), 201
 
+@app.route('/api/properties/<int:property_id>/documents/<int:doc_id>/download', methods=['GET'])
+@require_auth
+@require_property_access
+def download_document(property_id, doc_id):
+    db = get_db()
+    doc = db.execute('SELECT * FROM documents WHERE id=? AND property_id=?', (doc_id, property_id)).fetchone()
+    db.close()
+    if not doc:
+        return jsonify({'error': 'Document not found'}), 404
+    if not doc['file_path'] or not os.path.exists(doc['file_path']):
+        return jsonify({'error': 'File not found on server'}), 404
+    return send_file(doc['file_path'], as_attachment=True, download_name=doc['original_filename'] or doc['filename'])
+
+# ── DOCUMENT SHARING (secure links to outside parties) ────────────────────────
+SHARE_PARTY_TYPES = ('estate_agent', 'solicitor', 'mortgage_advisor', 'insurance',
+                     'surveyor', 'accountant', 'other')
+
+@app.route('/api/properties/<int:property_id>/documents/<int:doc_id>/share', methods=['POST'])
+@require_auth
+@require_property_access
+def share_document(property_id, doc_id):
+    if g.role not in ('broker', 'vendor', 'vendor_solicitor', 'buyer_solicitor'):
+        return jsonify({'error': 'You do not have permission to share documents'}), 403
+    data = request.get_json() or {}
+    db = get_db()
+    doc = db.execute('SELECT id FROM documents WHERE id=? AND property_id=?', (doc_id, property_id)).fetchone()
+    if not doc:
+        db.close()
+        return jsonify({'error': 'Document not found'}), 404
+    party_type = data.get('party_type') if data.get('party_type') in SHARE_PARTY_TYPES else 'other'
+    try:
+        days = int(data.get('expires_days', 30))
+    except (TypeError, ValueError):
+        days = 30
+    expires = (datetime.datetime.utcnow() + datetime.timedelta(days=days)).isoformat() if days and days > 0 else None
+    token = secrets.token_urlsafe(32)
+    c = db.execute('''INSERT INTO document_shares
+        (document_id, property_id, token, party_type, recipient_name, recipient_email, created_by, expires_at)
+        VALUES (?,?,?,?,?,?,?,?)''',
+        (doc_id, property_id, token, party_type, data.get('recipient_name'),
+         data.get('recipient_email'), g.user_id, expires))
+    audit(db, property_id, g.user_id, 'document_shared', 'document', doc_id,
+          f"{party_type}:{data.get('recipient_email') or ''}")
+    db.commit()
+    db.close()
+    return jsonify({'id': c.lastrowid, 'token': token,
+                    'share_path': f'/api/shared-documents/{token}/download',
+                    'expires_at': expires}), 201
+
+@app.route('/api/properties/<int:property_id>/documents/<int:doc_id>/shares', methods=['GET'])
+@require_role('broker')
+def list_document_shares(property_id, doc_id):
+    db = get_db()
+    rows = rows_to_list(db.execute(
+        '''SELECT id, party_type, recipient_name, recipient_email, created_at,
+                  expires_at, revoked, access_count, last_accessed_at, token
+           FROM document_shares WHERE document_id=? AND property_id=? ORDER BY created_at DESC''',
+        (doc_id, property_id)).fetchall())
+    db.close()
+    return jsonify(rows)
+
+@app.route('/api/shares/<int:share_id>/revoke', methods=['POST'])
+@require_role('broker')
+def revoke_share(share_id):
+    db = get_db()
+    db.execute('UPDATE document_shares SET revoked=1 WHERE id=?', (share_id,))
+    db.commit()
+    db.close()
+    return jsonify({'message': 'Share link revoked'})
+
+def _valid_share(row):
+    if not row or row['revoked']:
+        return False, ('This share link is invalid or has been revoked', 404)
+    if row['expires_at'] and row['expires_at'] < datetime.datetime.utcnow().isoformat():
+        return False, ('This share link has expired', 410)
+    return True, None
+
+@app.route('/api/shared-documents/<token>', methods=['GET'])
+def shared_document_meta(token):
+    """Public: metadata for a shared document (no login required)."""
+    db = get_db()
+    row = db.execute('''SELECT s.*, d.original_filename, d.doc_type, p.address_line1, p.city
+                        FROM document_shares s JOIN documents d ON s.document_id=d.id
+                        JOIN properties p ON s.property_id=p.id WHERE s.token=?''', (token,)).fetchone()
+    db.close()
+    ok, err = _valid_share(row)
+    if not ok:
+        return jsonify({'error': err[0]}), err[1]
+    return jsonify({
+        'filename': row['original_filename'], 'doc_type': row['doc_type'],
+        'property': f"{row['address_line1']}, {row['city']}",
+        'recipient_name': row['recipient_name'], 'expires_at': row['expires_at'],
+        'download_url': f'/api/shared-documents/{token}/download'})
+
+@app.route('/api/shared-documents/<token>/download', methods=['GET'])
+def shared_document_download(token):
+    """Public: download a shared document (no login required)."""
+    db = get_db()
+    row = db.execute('''SELECT s.*, d.file_path, d.original_filename, d.filename
+                        FROM document_shares s JOIN documents d ON s.document_id=d.id
+                        WHERE s.token=?''', (token,)).fetchone()
+    ok, err = _valid_share(row)
+    if not ok:
+        db.close()
+        return jsonify({'error': err[0]}), err[1]
+    db.execute('UPDATE document_shares SET access_count=access_count+1, last_accessed_at=CURRENT_TIMESTAMP WHERE id=?', (row['id'],))
+    db.commit()
+    db.close()
+    if not row['file_path'] or not os.path.exists(row['file_path']):
+        return jsonify({'error': 'File not found on server'}), 404
+    return send_file(row['file_path'], as_attachment=True, download_name=row['original_filename'] or row['filename'])
+
 # ══════════════════════════════════════════════════════════════════════════════
 # NOTIFICATIONS
 # ══════════════════════════════════════════════════════════════════════════════

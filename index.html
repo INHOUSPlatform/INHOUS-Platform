@@ -1055,7 +1055,13 @@ function DocumentsView({ propId }) {
   const [loading, setLoading] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
   const [docType, setDocType] = React.useState('other');
+  const [dragOver, setDragOver] = React.useState(false);
+  const [msg, setMsg] = React.useState(null);
   const fileRef = React.useRef();
+  const [shareFor, setShareFor] = React.useState(null);
+  const [shareForm, setShareForm] = React.useState({ party_type:'solicitor', recipient_name:'', recipient_email:'', expires_days:30 });
+  const [shareResult, setShareResult] = React.useState(null);
+  const [shareBusy, setShareBusy] = React.useState(false);
 
   React.useEffect(() => {
     authApi('GET', '/properties').then(ps => {
@@ -1071,18 +1077,47 @@ function DocumentsView({ propId }) {
     setDocs(d||[]); setLoading(false);
   };
 
-  const handleUpload = async (e) => {
-    const file = e.target.files[0]; if(!file) return;
-    setUploading(true);
-    const form = new FormData();
-    form.append('file', file);
-    form.append('doc_type', docType);
-    const headers = {};
-    const tok = localStorage.getItem('inhous_token');
-    if(tok) headers['Authorization'] = `Bearer ${tok}`;
-    const res = await fetch(`${API}/properties/${selectedProp}/documents`, { method:'POST', headers, body:form });
+  const uploadFiles = async (fileList) => {
+    const files = Array.from(fileList||[]).filter(Boolean);
+    if(!files.length || !selectedProp) return;
+    setUploading(true); setMsg(null);
+    let ok=0, fail=0;
+    for(const file of files){
+      const form = new FormData();
+      form.append('file', file);
+      form.append('doc_type', docType);
+      const tok = localStorage.getItem('inhous_token');
+      try {
+        const res = await fetch(`${API}/properties/${selectedProp}/documents`, { method:'POST', headers: tok?{Authorization:`Bearer ${tok}`}:{}, body:form });
+        if(res.ok) ok++; else fail++;
+      } catch { fail++; }
+    }
     setUploading(false);
-    if(res.ok) loadDocs(selectedProp);
+    setMsg({ ok: fail===0, text: `${ok} file${ok!==1?'s':''} uploaded${fail?`, ${fail} failed`:''}.` });
+    loadDocs(selectedProp);
+  };
+
+  const onInput = (e) => { uploadFiles(e.target.files); if(e.target) e.target.value=''; };
+  const onDrop = (e) => { e.preventDefault(); setDragOver(false); if(e.dataTransfer?.files?.length) uploadFiles(e.dataTransfer.files); };
+
+  const downloadDoc = async (d) => {
+    const tok = localStorage.getItem('inhous_token');
+    const res = await fetch(`${API}/properties/${selectedProp}/documents/${d.id}/download`, { headers: tok?{Authorization:`Bearer ${tok}`}:{} });
+    if(!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = d.original_filename||d.filename||'document'; document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const openShare = (d) => { setShareFor(d); setShareResult(null); setShareForm({ party_type:'solicitor', recipient_name:'', recipient_email:'', expires_days:30 }); };
+  const createShare = async () => {
+    setShareBusy(true); setShareResult(null);
+    try {
+      const res = await authApi('POST', `/properties/${selectedProp}/documents/${shareFor.id}/share`, shareForm);
+      setShareResult({ ok:true, url: window.location.origin + res.share_path, expires: res.expires_at });
+    } catch (err) { setShareResult({ ok:false, text: err.message }); }
+    finally { setShareBusy(false); }
   };
 
   const docTypeLabel = { photo:'Photo', floorplan:'Floorplan', epc:'Energy certificate (EPC / BER / DPE)', brochure:'Brochure', aml_vendor:'Vendor AML', aml_buyer:'Buyer AML', title_register:'Title register', planning:'Planning', proof_of_funds:'Proof of funds', agent_terms:'Agent terms', memo_of_sale:'Memo of sale', survey:'Survey', other:'Other' };
@@ -1099,16 +1134,59 @@ function DocumentsView({ propId }) {
       )}
       {['broker','vendor_solicitor','buyer_solicitor','vendor'].includes(user?.role) && (
         <div className="card" style={{marginBottom:16}}>
-          <div style={{display:'flex',gap:10,alignItems:'flex-end'}}>
-            <div className="field" style={{flex:1,marginBottom:0}}>
-              <label>Upload document</label>
-              <select value={docType} onChange={e=>setDocType(e.target.value)}>
-                {Object.entries(docTypeLabel).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+          <div className="field" style={{marginBottom:12}}>
+            <label>Document type</label>
+            <select value={docType} onChange={e=>setDocType(e.target.value)}>
+              {Object.entries(docTypeLabel).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+          <div
+            onDragOver={e=>{e.preventDefault(); if(!dragOver) setDragOver(true);}}
+            onDragLeave={e=>{e.preventDefault(); setDragOver(false);}}
+            onDrop={onDrop}
+            onClick={()=>!uploading && fileRef.current?.click()}
+            style={{border:`2px dashed ${dragOver?'var(--purple)':'var(--border)'}`,borderRadius:'var(--radius)',padding:'30px 16px',textAlign:'center',background:dragOver?'var(--purple-light)':'var(--light)',cursor:uploading?'default':'pointer',transition:'all .15s'}}>
+            <div style={{fontSize:26,marginBottom:6,color:dragOver?'var(--purple)':'var(--mid)'}}>⬆</div>
+            <div style={{fontSize:13,fontWeight:500,color:'var(--dark)'}}>{uploading?'Uploading…':dragOver?'Drop to upload':'Drag & drop files here, or click to browse'}</div>
+            <div style={{fontSize:12,color:'var(--mid)',marginTop:4}}>Uploading as: <b>{docTypeLabel[docType]}</b> · multiple files supported</div>
+          </div>
+          <input ref={fileRef} type="file" multiple style={{display:'none'}} onChange={onInput} />
+          {msg && <div style={{marginTop:12}}><InfoBox type={msg.ok?'green':'red'} label={msg.ok?'Uploaded':'Some uploads failed'}>{msg.text}</InfoBox></div>}
+        </div>
+      )}
+      {shareFor && (
+        <div className="card" style={{marginBottom:16,borderLeft:'3px solid var(--purple)'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+            <h3 style={{fontSize:15}}>Share externally — {shareFor.original_filename||shareFor.filename}</h3>
+            <button className="btn btn-sm" onClick={()=>setShareFor(null)}>Close</button>
+          </div>
+          <div style={{fontSize:12,color:'var(--mid)',marginBottom:12}}>Generate a secure link to send to an outside party (estate agent, solicitor, mortgage advisor, insurer…). No INHOUS login is needed to open it; the link expires and can be revoked.</div>
+          <div className="grid2">
+            <div className="field"><label>Party type</label>
+              <select value={shareForm.party_type} onChange={e=>setShareForm({...shareForm,party_type:e.target.value})}>
+                <option value="estate_agent">Estate agent</option>
+                <option value="solicitor">Solicitor</option>
+                <option value="mortgage_advisor">Mortgage advisor</option>
+                <option value="insurance">Insurance</option>
+                <option value="surveyor">Surveyor</option>
+                <option value="accountant">Accountant</option>
+                <option value="other">Other</option>
               </select>
             </div>
-            <button className="btn btn-primary btn-sm" onClick={()=>fileRef.current?.click()} disabled={uploading}>{uploading?'Uploading…':'Choose file'}</button>
-            <input ref={fileRef} type="file" style={{display:'none'}} onChange={handleUpload} />
+            <div className="field"><label>Recipient name</label><input value={shareForm.recipient_name} onChange={e=>setShareForm({...shareForm,recipient_name:e.target.value})} placeholder="e.g. Jane Doe" /></div>
+            <div className="field"><label>Recipient email</label><input type="email" value={shareForm.recipient_email} onChange={e=>setShareForm({...shareForm,recipient_email:e.target.value})} placeholder="name@firm.com" /></div>
+            <div className="field"><label>Link expires in (days)</label><input type="number" value={shareForm.expires_days} onChange={e=>setShareForm({...shareForm,expires_days:e.target.value})} placeholder="30 — 0 for no expiry" /></div>
           </div>
+          <button type="button" className="btn btn-primary btn-sm" onClick={createShare} disabled={shareBusy}>{shareBusy?'Generating…':'Generate share link'}</button>
+          {shareResult && (shareResult.ok ? (
+            <div style={{marginTop:12}}><InfoBox type="green" label="Share link ready">
+              <div style={{wordBreak:'break-all',marginBottom:8,fontFamily:'monospace',fontSize:12}}>{shareResult.url}</div>
+              <button type="button" className="btn btn-sm" onClick={()=>navigator.clipboard?.writeText(shareResult.url)}>Copy link</button>
+              {shareResult.expires && <span style={{fontSize:11,color:'var(--mid)',marginLeft:10}}>Expires {shareResult.expires.split('T')[0]}</span>}
+            </InfoBox></div>
+          ) : (
+            <div style={{marginTop:12}}><InfoBox type="red" label="Error">{shareResult.text}</InfoBox></div>
+          ))}
         </div>
       )}
       {loading ? <Spinner /> : docs.length === 0 ? (
@@ -1116,7 +1194,7 @@ function DocumentsView({ propId }) {
       ) : (
         <div className="card">
           <table className="table">
-            <thead><tr><th>Document</th><th>Type</th><th>Uploaded by</th><th>Date</th><th>Status</th></tr></thead>
+            <thead><tr><th>Document</th><th>Type</th><th>Uploaded by</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
               {docs.map(d=>(
                 <tr key={d.id}>
@@ -1125,6 +1203,10 @@ function DocumentsView({ propId }) {
                   <td style={{fontSize:12,color:'var(--mid)'}}>{d.uploaded_by_name||'—'}</td>
                   <td style={{fontSize:12,color:'var(--mid)'}}>{d.created_at?.split('T')[0]}</td>
                   <td><Badge status={d.status} /></td>
+                  <td style={{whiteSpace:'nowrap'}}>
+                    <button className="btn btn-sm" onClick={()=>downloadDoc(d)}>Download</button>
+                    {['broker','vendor','vendor_solicitor','buyer_solicitor'].includes(user?.role) && <button className="btn btn-sm btn-primary" style={{marginLeft:6}} onClick={()=>openShare(d)}>Share</button>}
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -329,6 +329,23 @@ def init_db():
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
 
+    # ── DOCUMENT SHARES (secure links to outside parties) ─────────────────────
+    c.execute('''CREATE TABLE IF NOT EXISTS document_shares (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        document_id INTEGER NOT NULL REFERENCES documents(id),
+        property_id INTEGER NOT NULL REFERENCES properties(id),
+        token TEXT UNIQUE NOT NULL,
+        party_type TEXT,
+        recipient_name TEXT,
+        recipient_email TEXT,
+        created_by INTEGER REFERENCES users(id),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expires_at DATETIME,
+        revoked INTEGER DEFAULT 0,
+        access_count INTEGER DEFAULT 0,
+        last_accessed_at DATETIME
+    )''')
+
     # ── Schema migrations: add new columns to pre-existing tables (idempotent) ──
     migrations = {
         'properties': [("state_region", "TEXT"), ("currency", "TEXT DEFAULT 'GBP'")],
