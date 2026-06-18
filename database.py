@@ -382,7 +382,7 @@ def add_referral_tables():
 
     c.execute('''CREATE TABLE IF NOT EXISTS referral_partners (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        category TEXT NOT NULL CHECK(category IN ('insurance','removal','surveyor','other')),
+        category TEXT NOT NULL,
         company_name TEXT NOT NULL,
         contact_name TEXT,
         contact_email TEXT,
@@ -421,6 +421,32 @@ def add_referral_tables():
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
 
+    # Migration: drop the restrictive category CHECK on pre-existing DBs so new
+    # introduction categories (interior_designer, builder, cleaning, …) are allowed.
+    row = c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='referral_partners'").fetchone()
+    if row and row[0] and "category IN ('insurance'" in row[0]:
+        c.execute("PRAGMA foreign_keys=OFF")
+        c.execute('''CREATE TABLE referral_partners_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL,
+            company_name TEXT NOT NULL,
+            contact_name TEXT, contact_email TEXT, contact_phone TEXT, website_url TEXT,
+            referral_fee_type TEXT CHECK(referral_fee_type IN ('fixed','percentage','none')),
+            referral_fee_amount REAL, referral_fee_notes TEXT, disclosure_text TEXT,
+            is_active INTEGER DEFAULT 1, sort_order INTEGER DEFAULT 0, notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )''')
+        c.execute('''INSERT INTO referral_partners_new
+            (id,category,company_name,contact_name,contact_email,contact_phone,website_url,
+             referral_fee_type,referral_fee_amount,referral_fee_notes,disclosure_text,
+             is_active,sort_order,notes,created_at)
+            SELECT id,category,company_name,contact_name,contact_email,contact_phone,website_url,
+             referral_fee_type,referral_fee_amount,referral_fee_notes,disclosure_text,
+             is_active,sort_order,notes,created_at FROM referral_partners''')
+        c.execute("DROP TABLE referral_partners")
+        c.execute("ALTER TABLE referral_partners_new RENAME TO referral_partners")
+        c.execute("PRAGMA foreign_keys=ON")
+
     # Seed default partners
     existing = c.execute("SELECT id FROM referral_partners LIMIT 1").fetchone()
     if not existing:
@@ -444,6 +470,21 @@ def add_referral_tables():
                  referral_fee_notes, disclosure_text, sort_order)
                 VALUES (?,?,?,?,?,?,?,?)''',
                 (cat, name, notes, fee_type, fee_amt, fee_notes, disc, i))
+
+    # Idempotent seed of third-party introduction partners (interior designers,
+    # builders, cleaning) — added on both fresh and existing databases.
+    intro_partners = [
+        ('interior_designer','Studio Maven','Full-service luxury interior design','none',None,None,''),
+        ('interior_designer','Albion & Vale Interiors','Heritage & period-property specialists','none',None,None,''),
+        ('builder','Hartley Build & Restore','High-end refurbishment & structural works','none',None,None,''),
+        ('builder','Meridian Contractors','Extensions, new-build & fit-out','none',None,None,''),
+        ('cleaning','Spotless London','Deep cleans and move-in / move-out','fixed',50.0,'£50 per booking','INHOUS receives a £50 referral fee from Spotless London for each completed booking made through this introduction. This does not affect the price you are quoted.'),
+    ]
+    for cat, name, notes, ft, fa, fn, disc in intro_partners:
+        if not c.execute("SELECT id FROM referral_partners WHERE company_name=?", (name,)).fetchone():
+            c.execute('''INSERT INTO referral_partners
+                (category, company_name, notes, referral_fee_type, referral_fee_amount, referral_fee_notes, disclosure_text)
+                VALUES (?,?,?,?,?,?,?)''', (cat, name, notes, ft, fa, fn, disc))
 
     conn.commit()
     conn.close()

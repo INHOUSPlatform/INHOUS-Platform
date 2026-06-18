@@ -1791,6 +1791,102 @@ function PartiesPanel({ propId }) {
   );
 }
 
+const INTRO_CATS = {
+  interior_designer:'Interior designers', builder:'Builders & contractors', architect:'Architects',
+  landscaping:'Landscaping & gardens', removal:'Removal companies', cleaning:'Cleaning services',
+  insurance:'Insurance', mortgage_advisor:'Mortgage advisors', surveyor:'Surveyors', other:'Other services'
+};
+const INTRO_ORDER = ['interior_designer','builder','architect','landscaping','removal','cleaning','insurance','mortgage_advisor','surveyor','other'];
+
+function IntroductionsView({ propId }) {
+  const { authApi, user } = useAuth();
+  const { prop } = useProperty();
+  const [partners, setPartners] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [msg, setMsg] = React.useState(null);
+  const [requested, setRequested] = React.useState({});
+  const [showAdd, setShowAdd] = React.useState(false);
+  const blank = { category:'interior_designer', company_name:'', notes:'', contact_email:'', contact_phone:'', website_url:'', disclosure_text:'' };
+  const [addForm, setAddForm] = React.useState(blank);
+  const eligible = ['under_offer','sold'].includes(prop?.status);
+
+  const load = () => { setLoading(true); authApi('GET','/referral-partners').then(p=>setPartners(p||[])).catch(()=>{}).finally(()=>setLoading(false)); };
+  React.useEffect(()=>{ load(); }, [propId]);
+
+  const requestIntro = async (p) => {
+    setMsg(null);
+    try {
+      await authApi('POST', `/properties/${propId}/referrals/acknowledge`, { category:p.category, partner_id:p.id });
+      setRequested(r=>({...r,[p.id]:true}));
+      setMsg({ ok:true, text:`Introduction requested — ${p.company_name} will be in touch.${p.disclosure_text?' '+p.disclosure_text:''}` });
+    } catch(err){ setMsg({ ok:false, text: err.message }); }
+  };
+  const addPartner = async (e) => {
+    e.preventDefault(); setMsg(null);
+    try {
+      await authApi('POST', '/referral-partners', addForm);
+      setShowAdd(false); setAddForm(blank); setMsg({ ok:true, text:'Partner added.' }); load();
+    } catch(err){ setMsg({ ok:false, text: err.message }); }
+  };
+
+  if (!eligible && user?.role !== 'broker') {
+    return <div><PageHeader title="Introductions" subtitle="Trusted third-party partners" />
+      <InfoBox type="amber" label="Available after acceptance">Trusted introductions — interior designers, builders, removals and more — become available here once an offer has been accepted.</InfoBox></div>;
+  }
+
+  const groups = {};
+  partners.forEach(p=>{ (groups[p.category]=groups[p.category]||[]).push(p); });
+  const cats = Object.keys(groups).sort((a,b)=>{ const ia=INTRO_ORDER.indexOf(a), ib=INTRO_ORDER.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); });
+
+  return (
+    <div>
+      <PageHeader title="Introductions" subtitle="Trusted third-party partners"
+        actions={user?.role==='broker' && <button className="btn btn-primary btn-sm" onClick={()=>setShowAdd(!showAdd)}>+ Add partner</button>} />
+      {['buyer','vendor'].includes(user?.role) && <InfoBox type="purple" label="Now your move is agreed">INHOUS works with a network of trusted partners. Request an introduction below and they'll be in touch. Where a referral fee applies, it's shown on the partner.</InfoBox>}
+      {user?.role==='broker' && !eligible && <InfoBox type="amber" label="Note">Buyers and vendors see this once an offer is accepted on this property — you can curate the list now.</InfoBox>}
+      {msg && <InfoBox type={msg.ok?'green':'red'}>{msg.text}</InfoBox>}
+      {showAdd && (
+        <div className="card" style={{marginBottom:16}}>
+          <h3 style={{fontSize:15,marginBottom:12}}>Add introduction partner</h3>
+          <form onSubmit={addPartner}>
+            <div className="grid2">
+              <div className="field"><label>Category</label><select value={addForm.category} onChange={e=>setAddForm({...addForm,category:e.target.value})}>{INTRO_ORDER.map(c=><option key={c} value={c}>{INTRO_CATS[c]}</option>)}</select></div>
+              <div className="field"><label>Company name *</label><input value={addForm.company_name} onChange={e=>setAddForm({...addForm,company_name:e.target.value})} required /></div>
+              <div className="field"><label>Contact email</label><input type="email" value={addForm.contact_email} onChange={e=>setAddForm({...addForm,contact_email:e.target.value})} /></div>
+              <div className="field"><label>Contact phone</label><input value={addForm.contact_phone} onChange={e=>setAddForm({...addForm,contact_phone:e.target.value})} /></div>
+            </div>
+            <div className="field"><label>Website</label><input value={addForm.website_url} onChange={e=>setAddForm({...addForm,website_url:e.target.value})} placeholder="https://" /></div>
+            <div className="field"><label>Short description</label><input value={addForm.notes} onChange={e=>setAddForm({...addForm,notes:e.target.value})} placeholder="e.g. Full-service luxury interior design" /></div>
+            <div className="field"><label>Fee disclosure (shown to clients)</label><input value={addForm.disclosure_text} onChange={e=>setAddForm({...addForm,disclosure_text:e.target.value})} placeholder="e.g. INHOUS receives a referral fee…" /></div>
+            <div style={{display:'flex',gap:8}}><button type="submit" className="btn btn-primary btn-sm">Add partner</button><button type="button" className="btn btn-sm" onClick={()=>setShowAdd(false)}>Cancel</button></div>
+          </form>
+        </div>
+      )}
+      {loading ? <Spinner/> : cats.length===0 ? (
+        <div className="empty"><div className="empty-icon">🤝</div><div>No partners listed yet</div></div>
+      ) : cats.map(cat=>(
+        <div key={cat} style={{marginBottom:18}}>
+          <div style={{fontSize:12,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>{INTRO_CATS[cat]||cat}</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(250px,1fr))',gap:10}}>
+            {groups[cat].map(p=>(
+              <div key={p.id} className="card">
+                <div style={{fontWeight:500,fontSize:14}}>{p.company_name}</div>
+                {p.notes && <div style={{fontSize:12,color:'var(--mid)',marginTop:2}}>{p.notes}</div>}
+                {p.website_url && <div style={{marginTop:4}}><a href={p.website_url} target="_blank" rel="noreferrer" style={{fontSize:12,color:'var(--purple)'}}>Visit website</a></div>}
+                {user?.role==='broker' && p.referral_fee_amount!=null && <div style={{fontSize:11,color:'var(--mid)',marginTop:4}}>Fee: {p.referral_fee_type==='percentage'?`${p.referral_fee_amount}%`:`£${p.referral_fee_amount}`}</div>}
+                {p.disclosure_text && <div style={{fontSize:11,color:'var(--mid)',marginTop:6,fontStyle:'italic'}}>{p.disclosure_text}</div>}
+                {['buyer','vendor'].includes(user?.role) && (requested[p.id]
+                  ? <div style={{marginTop:8,fontSize:12,color:'var(--green)',fontWeight:500}}>✓ Introduction requested</div>
+                  : <button className="btn btn-sm btn-primary" style={{marginTop:8}} onClick={()=>requestIntro(p)}>Request introduction</button>)}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PropertyShell({ prop, page, setPage, onBack, children }) {
   const { user } = useAuth();
   const sym = {GBP:'£',EUR:'€',USD:'$',CHF:'CHF ',AED:'AED '}[prop.currency||'GBP'] || '£';
@@ -1802,7 +1898,11 @@ function PropertyShell({ prop, page, setPage, onBack, children }) {
     { id:'documents', label:'Documents', roles:['broker','vendor','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
     { id:'aml', label:'AML / KYC', roles:['broker','vendor_solicitor','buyer_solicitor','agent'] },
     { id:'photography', label:'Photography', roles:['broker','vendor'] },
+    { id:'introductions', label:'Introductions', roles:['broker','vendor','buyer'] },
   ].filter(t => t.roles.includes(user?.role));
+  // Introductions only surface for buyer/vendor once an offer is accepted; broker can curate anytime
+  const introEligible = ['under_offer','sold'].includes(prop.status);
+  const visibleTabs = (!introEligible && user?.role !== 'broker') ? tabs.filter(t => t.id !== 'introductions') : tabs;
   return (
     <div>
       <button className="btn btn-sm" onClick={onBack} style={{marginBottom:10}}>← All properties</button>
@@ -1818,7 +1918,7 @@ function PropertyShell({ prop, page, setPage, onBack, children }) {
           </div>
         </div>
         <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:14,borderTop:'1px solid var(--border)',paddingTop:12}}>
-          {tabs.map(t => (
+          {visibleTabs.map(t => (
             <button key={t.id} onClick={()=>setPage(t.id)}
               style={{padding:'6px 13px',borderRadius:'var(--radius-sm)',border:'none',cursor:'pointer',fontSize:13,transition:'all .15s',
                 background: page===t.id?'var(--purple)':'var(--light)', color: page===t.id?'#fff':'var(--mid)', fontWeight: page===t.id?500:400}}>
@@ -1853,12 +1953,13 @@ function App() {
     documents:<DocumentsView propId={activeProperty?.id}/>,
     aml:<AMLView propId={activeProperty?.id}/>,
     photography:<PhotographyView propId={activeProperty?.id}/>,
+    introductions:<IntroductionsView propId={activeProperty?.id}/>,
     notifications:<NotificationsView/>,
     admin:<AdminView/>
   };
 
   const content = views[page] || <DashboardView openProperty={openProperty}/>;
-  const inFolder = activeProperty && ['viewings','feedback','offers','documents','aml','photography'].includes(page);
+  const inFolder = activeProperty && ['viewings','feedback','offers','documents','aml','photography','introductions'].includes(page);
 
   return (
     <PropertyContext.Provider value={{ prop: activeProperty, openProperty }}>
