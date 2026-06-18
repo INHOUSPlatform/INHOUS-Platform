@@ -283,10 +283,10 @@ function DashboardLayout({ children, currentPage, setPage, activeProperty, close
     { id: 'viewings', label: 'Viewings', roles: ['broker','vendor','agent'] },
     { id: 'feedback', label: 'Feedback', roles: ['broker','vendor','agent'] },
     { id: 'offers', label: 'Offers', roles: ['broker','vendor','agent'] },
-    { id: 'documents', label: 'Documents', roles: ['broker','vendor','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
+    { id: 'documents', label: 'Documents', roles: ['broker','vendor','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer'] },
     { id: 'aml', label: 'AML / KYC', roles: ['broker','vendor_solicitor','buyer_solicitor','agent'] },
-    { id: 'photography', label: 'Photography', roles: ['broker','vendor'] },
-    { id: 'notifications', label: `Notifications${notifCount > 0 ? ` (${notifCount})` : ''}`, roles: ['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
+    { id: 'photography', label: 'Photography', roles: ['broker','vendor','photographer'] },
+    { id: 'notifications', label: `Notifications${notifCount > 0 ? ` (${notifCount})` : ''}`, roles: ['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer'] },
     { id: 'admin', label: 'Admin', roles: ['broker'] },
   ];
 
@@ -295,7 +295,7 @@ function DashboardLayout({ children, currentPage, setPage, activeProperty, close
   const roleLabel = {
     broker: 'INHOUS Broker', vendor: 'Vendor', agent: 'Agent',
     vendor_solicitor: 'Vendor Solicitor', buyer_solicitor: 'Buyer Solicitor',
-    buyer: 'Buyer', family_office: 'Family Office'
+    buyer: 'Buyer', family_office: 'Family Office', photographer: 'Photographer'
   };
 
   return (
@@ -1216,7 +1216,7 @@ function DocumentsView({ propId }) {
           </select>
         </div>
       )}
-      {['broker','vendor_solicitor','buyer_solicitor','vendor'].includes(user?.role) && (
+      {['broker','vendor_solicitor','buyer_solicitor','vendor','photographer'].includes(user?.role) && (
         <div className="card" style={{marginBottom:16}}>
           <div className="field" style={{marginBottom:12}}>
             <label>Document type</label>
@@ -1567,7 +1567,7 @@ function AdminView() {
     } catch(err){ setError(err.message); } finally { setSaving(false); }
   };
 
-  const roleOpts = ['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office'];
+  const roleOpts = ['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer'];
 
   return (
     <div>
@@ -1752,6 +1752,7 @@ function PartiesPanel({ propId }) {
                   <option value="buyer_solicitor">Buyer solicitor</option>
                   <option value="buyer">Buyer</option>
                   <option value="family_office">Family office</option>
+                  <option value="photographer">Photographer</option>
                 </select>
               </div>
               <div className="field"><label>Agency / firm name</label><input value={invForm.agency_name} onChange={e=>setInvForm({...invForm,agency_name:e.target.value})} placeholder="e.g. Knight Frank, M. Singh & Co" /></div>
@@ -2034,14 +2035,14 @@ function PropertyShell({ prop, page, setPage, onBack, children }) {
   const sym = {GBP:'£',EUR:'€',USD:'$',CHF:'CHF ',AED:'AED '}[prop.currency||'GBP'] || '£';
   const tabs = [
     { id:'property', label:'Overview', roles:['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
-    { id:'participants', label:'Participants', roles:['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
+    { id:'participants', label:'Participants', roles:['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer'] },
     { id:'valuations', label:'Valuations', roles:['broker','vendor','agent'] },
     { id:'viewings', label:'Viewings', roles:['broker','vendor','agent'] },
     { id:'feedback', label:'Feedback', roles:['broker','vendor','agent'] },
     { id:'offers', label:'Offers', roles:['broker','vendor','agent'] },
-    { id:'documents', label:'Documents', roles:['broker','vendor','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
+    { id:'documents', label:'Documents', roles:['broker','vendor','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer'] },
     { id:'aml', label:'AML / KYC', roles:['broker','vendor_solicitor','buyer_solicitor','agent'] },
-    { id:'photography', label:'Photography', roles:['broker','vendor'] },
+    { id:'photography', label:'Photography', roles:['broker','vendor','photographer'] },
     { id:'introductions', label:'Introductions', roles:['broker','vendor','buyer'] },
   ].filter(t => t.roles.includes(user?.role));
   // Introductions only surface for buyer/vendor once an offer is accepted; broker can curate anytime

@@ -2,8 +2,9 @@ import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-from database import init_db, add_referral_tables
+from database import init_db, add_referral_tables, relax_user_roles
 init_db()
+relax_user_roles()
 add_referral_tables()
 
 from app import app

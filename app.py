@@ -283,7 +283,7 @@ def send_invite(property_id):
     data = request.get_json()
     email = (data.get('email') or '').strip().lower()
     role = data.get('role')
-    valid_roles = ['vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office']
+    valid_roles = ['vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer']
     if not email or role not in valid_roles:
         return jsonify({'error': 'Email and valid role required'}), 400
     db = get_db()
@@ -1008,6 +1008,7 @@ def get_documents(property_id):
         'buyer_solicitor': ('aml_buyer','aml_verification','title_register','planning','memo_of_sale','epc','proof_of_funds','survey'),
         'buyer': ('memo_of_sale','epc','brochure'),
         'family_office': ('brochure','epc'),
+        'photographer': ('photo','floorplan','epc'),
     }
     allowed = role_visible.get(g.role)
     if allowed:

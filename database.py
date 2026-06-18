@@ -20,10 +20,7 @@ def init_db():
         email TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
         full_name TEXT NOT NULL,
-        role TEXT NOT NULL CHECK(role IN (
-            'broker','vendor','agent','vendor_solicitor',
-            'buyer_solicitor','buyer','family_office'
-        )),
+        role TEXT NOT NULL,
         agency_name TEXT,
         phone TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -380,6 +377,39 @@ def init_db():
     conn.commit()
     conn.close()
     print("Database initialised successfully")
+
+def relax_user_roles():
+    """Drop the hard-coded users.role CHECK on pre-existing databases so new roles
+    (e.g. photographer) are permitted. Runs outside a transaction so the temporary
+    foreign_keys=OFF actually takes effect during the table rebuild."""
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").fetchone()
+    if row and row[0] and "role IN (" in row[0]:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.executescript('''
+            BEGIN;
+            CREATE TABLE users_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                full_name TEXT NOT NULL,
+                role TEXT NOT NULL,
+                agency_name TEXT,
+                phone TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                last_login DATETIME,
+                is_active INTEGER DEFAULT 1,
+                two_factor_enabled INTEGER DEFAULT 0
+            );
+            INSERT INTO users_new (id,email,password_hash,full_name,role,agency_name,phone,created_at,last_login,is_active,two_factor_enabled)
+                SELECT id,email,password_hash,full_name,role,agency_name,phone,created_at,last_login,is_active,two_factor_enabled FROM users;
+            DROP TABLE users;
+            ALTER TABLE users_new RENAME TO users;
+            COMMIT;
+        ''')
+        conn.execute("PRAGMA foreign_keys=ON")
+        print("Relaxed users.role constraint (new roles allowed)")
+    conn.close()
 
 def audit(conn, property_id, user_id, action, entity_type=None, entity_id=None, detail=None):
     conn.execute('''INSERT INTO audit_log 
