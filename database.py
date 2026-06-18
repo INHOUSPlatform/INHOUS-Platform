@@ -345,6 +345,17 @@ def init_db():
         last_accessed_at DATETIME
     )''')
 
+    # ── BROCHURES (one per property; assembled from photos + details) ─────────
+    c.execute('''CREATE TABLE IF NOT EXISTS brochures (
+        property_id INTEGER PRIMARY KEY REFERENCES properties(id),
+        headline TEXT,
+        summary TEXT,
+        highlights TEXT,
+        hero_doc_id INTEGER,
+        updated_by INTEGER REFERENCES users(id),
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )''')
+
     # ── VALUATIONS (pre-instruction valuations from agents) ───────────────────
     c.execute('''CREATE TABLE IF NOT EXISTS valuations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

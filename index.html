@@ -57,6 +57,12 @@
   .info-label { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
   .info-text { font-size: 12px; line-height: 1.6; }
   .divider { height: 1px; background: var(--border); margin: 16px 0; }
+  @media print {
+    body * { visibility: hidden; }
+    .brochure-preview, .brochure-preview * { visibility: visible; }
+    .brochure-preview { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; border: none; margin: 0; }
+    .no-print { display: none !important; }
+  }
   .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin-bottom: 16px; }
   .stat { background: var(--light); border-radius: var(--radius-sm); padding: 12px; text-align: center; border: 1px solid var(--border); }
   .stat-val { font-size: 22px; font-weight: 600; color: var(--dark); font-family: 'Cormorant Garamond', serif; }
@@ -2030,6 +2036,97 @@ function ParticipantsView({ propId }) {
   );
 }
 
+function BrochureView({ propId }) {
+  const { authApi, user } = useAuth();
+  const { prop } = useProperty();
+  const [images, setImages] = React.useState([]);
+  const [urls, setUrls] = React.useState({});
+  const [form, setForm] = React.useState({ headline:'', summary:'', highlights:'', hero_doc_id:null });
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [msg, setMsg] = React.useState(null);
+  const sym = CURRENCY_SYM[prop?.currency||'GBP'] || '£';
+
+  React.useEffect(()=>{
+    let revoke=[];
+    authApi('GET',`/properties/${propId}/brochure`).then(async (d)=>{
+      const imgs = d.images||[]; setImages(imgs);
+      const b = d.brochure||{};
+      setForm({ headline:b.headline||'', summary:b.summary||'', highlights:b.highlights||'', hero_doc_id:b.hero_doc_id||(imgs[0]&&imgs[0].id)||null });
+      const tok = localStorage.getItem('inhous_token'); const map={};
+      for (const im of imgs) {
+        try { const r=await fetch(`${API}/properties/${propId}/documents/${im.id}/download`,{headers:tok?{Authorization:`Bearer ${tok}`}:{}}); if(r.ok){ const u=URL.createObjectURL(await r.blob()); map[im.id]=u; revoke.push(u);} } catch(e){}
+      }
+      setUrls(map);
+    }).catch(()=>{}).finally(()=>setLoading(false));
+    return ()=>revoke.forEach(u=>URL.revokeObjectURL(u));
+  }, [propId]);
+
+  const save = async () => { setSaving(true); setMsg(null);
+    try { await authApi('PUT',`/properties/${propId}/brochure`, form); setMsg({ok:true,text:'Brochure saved.'}); }
+    catch(err){ setMsg({ok:false,text:err.message}); } finally { setSaving(false); }
+  };
+
+  if (loading) return <div><PageHeader title="Brochure"/><Spinner/></div>;
+  const canEdit = ['broker','agent','vendor'].includes(user?.role);
+  const photos = images.filter(i=>i.doc_type==='photo');
+  const floorplans = images.filter(i=>i.doc_type==='floorplan');
+  const hero = form.hero_doc_id || (photos[0]&&photos[0].id) || (images[0]&&images[0].id);
+  const money = prop?.guide_price ? `${sym}${Number(prop.guide_price).toLocaleString()}` : '';
+  const highlightList = (form.highlights||'').split('\n').map(s=>s.trim()).filter(Boolean);
+
+  return (
+    <div>
+      <PageHeader title="Brochure" subtitle="Build a brochure from the photos & floorplans"
+        actions={canEdit && <span className="no-print"><button className="btn btn-sm" onClick={save} disabled={saving} style={{marginRight:6}}>{saving?'Saving…':'Save'}</button><button className="btn btn-primary btn-sm" onClick={()=>window.print()}>Print / PDF</button></span>} />
+      {images.length===0 && <div className="no-print"><InfoBox type="amber" label="No images yet">Upload photos and floorplans (via Photography or Documents) and they'll appear here to build the brochure.</InfoBox></div>}
+      {msg && <div className="no-print"><InfoBox type={msg.ok?'green':'red'}>{msg.text}</InfoBox></div>}
+
+      {canEdit && (
+        <div className="card no-print" style={{marginBottom:16}}>
+          <div className="field"><label>Headline</label><input value={form.headline} onChange={e=>setForm({...form,headline:e.target.value})} placeholder="e.g. An exceptional Regency villa overlooking the park" /></div>
+          <div className="field"><label>Summary</label><textarea value={form.summary} onChange={e=>setForm({...form,summary:e.target.value})} placeholder="Lead paragraph describing the property…" style={{minHeight:80}} /></div>
+          <div className="field"><label>Key highlights (one per line)</label><textarea value={form.highlights} onChange={e=>setForm({...form,highlights:e.target.value})} placeholder={"6 bedrooms\nSouth-facing garden\nOff-street parking"} style={{minHeight:80}} /></div>
+          {photos.length>0 && (
+            <div className="field"><label>Cover photo</label>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                {photos.map(p=>(
+                  <div key={p.id} onClick={()=>setForm({...form,hero_doc_id:p.id})} style={{cursor:'pointer',border:`2px solid ${hero===p.id?'var(--purple)':'transparent'}`,borderRadius:6,padding:2}}>
+                    {urls[p.id] ? <img src={urls[p.id]} alt="" style={{width:90,height:60,objectFit:'cover',borderRadius:4,display:'block'}}/> : <div style={{width:90,height:60,background:'var(--light)',borderRadius:4,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'var(--mid)'}}>img</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="brochure-preview card" style={{padding:0,overflow:'hidden'}}>
+        {hero && urls[hero] ? <img src={urls[hero]} alt="" style={{width:'100%',maxHeight:380,objectFit:'cover',display:'block'}}/> : <div style={{height:180,background:'var(--light)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--mid)'}}>No cover photo yet</div>}
+        <div style={{padding:24}}>
+          <div style={{fontSize:11,letterSpacing:'0.12em',color:'var(--gold)',textTransform:'uppercase'}}>INHOUS</div>
+          <h2 style={{fontSize:26,margin:'4px 0'}}>{form.headline || prop?.address_line1}</h2>
+          <div style={{fontSize:13,color:'var(--mid)'}}>{prop?.address_line1}{prop?.address_line2?`, ${prop.address_line2}`:''}, {prop?.city}{prop?.postcode?` ${prop.postcode}`:''}</div>
+          {money && <div style={{fontSize:22,fontWeight:600,color:'var(--purple)',marginTop:8}}>{money}</div>}
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',margin:'12px 0'}}>
+            {prop?.bedrooms && <span className="badge badge-gray">{prop.bedrooms} bed</span>}
+            {prop?.floor_area_sqft && <span className="badge badge-gray">{prop.floor_area_sqft.toLocaleString()} sq ft</span>}
+            {prop?.tenure && <span className="badge badge-gray">{prop.tenure}</span>}
+            {prop?.epc_rating && <span className="badge badge-gray">EPC {prop.epc_rating}</span>}
+          </div>
+          {form.summary && <p style={{fontSize:14,lineHeight:1.6}}>{form.summary}</p>}
+          {highlightList.length>0 && <ul style={{margin:'12px 0',paddingLeft:18,fontSize:14}}>{highlightList.map((h,i)=><li key={i} style={{marginBottom:4}}>{h}</li>)}</ul>}
+          {photos.length>1 && <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:8,marginTop:12}}>
+            {photos.filter(p=>p.id!==hero).map(p=> urls[p.id] ? <img key={p.id} src={urls[p.id]} alt="" style={{width:'100%',height:110,objectFit:'cover',borderRadius:6}}/> : null)}
+          </div>}
+          {floorplans.length>0 && <div style={{marginTop:16}}><div style={{fontSize:12,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',marginBottom:6}}>Floorplan</div>
+            {floorplans.map(f=> urls[f.id] ? <img key={f.id} src={urls[f.id]} alt="" style={{width:'100%',borderRadius:6,marginBottom:8}}/> : null)}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PropertyShell({ prop, page, setPage, onBack, children }) {
   const { user } = useAuth();
   const sym = {GBP:'£',EUR:'€',USD:'$',CHF:'CHF ',AED:'AED '}[prop.currency||'GBP'] || '£';
@@ -2043,6 +2140,7 @@ function PropertyShell({ prop, page, setPage, onBack, children }) {
     { id:'documents', label:'Documents', roles:['broker','vendor','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer'] },
     { id:'aml', label:'AML / KYC', roles:['broker','vendor_solicitor','buyer_solicitor','agent'] },
     { id:'photography', label:'Photography', roles:['broker','vendor','photographer'] },
+    { id:'brochure', label:'Brochure', roles:['broker','vendor','agent'] },
     { id:'introductions', label:'Introductions', roles:['broker','vendor','buyer'] },
   ].filter(t => t.roles.includes(user?.role));
   // Introductions only surface for buyer/vendor once an offer is accepted; broker can curate anytime
@@ -2098,6 +2196,7 @@ function App() {
     documents:<DocumentsView propId={activeProperty?.id}/>,
     aml:<AMLView propId={activeProperty?.id}/>,
     photography:<PhotographyView propId={activeProperty?.id}/>,
+    brochure:<BrochureView propId={activeProperty?.id}/>,
     participants:<ParticipantsView propId={activeProperty?.id}/>,
     valuations:<ValuationsView propId={activeProperty?.id}/>,
     introductions:<IntroductionsView propId={activeProperty?.id}/>,
@@ -2106,7 +2205,7 @@ function App() {
   };
 
   const content = views[page] || <DashboardView openProperty={openProperty}/>;
-  const inFolder = activeProperty && ['participants','valuations','viewings','feedback','offers','documents','aml','photography','introductions'].includes(page);
+  const inFolder = activeProperty && ['participants','valuations','viewings','feedback','offers','documents','aml','photography','brochure','introductions'].includes(page);
 
   return (
     <PropertyContext.Provider value={{ prop: activeProperty, openProperty }}>

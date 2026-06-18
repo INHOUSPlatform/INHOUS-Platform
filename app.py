@@ -1278,6 +1278,42 @@ def get_participants(property_id):
     return jsonify({'is_broker': is_broker, 'people': people, 'third_parties': third_parties})
 
 # ══════════════════════════════════════════════════════════════════════════════
+# BROCHURE
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/api/properties/<int:property_id>/brochure', methods=['GET'])
+@require_auth
+@require_property_access
+def get_brochure(property_id):
+    db = get_db()
+    b = db.execute('SELECT * FROM brochures WHERE property_id=?', (property_id,)).fetchone()
+    photos = rows_to_list(db.execute(
+        "SELECT id, doc_type, original_filename, filename FROM documents WHERE property_id=? AND doc_type IN ('photo','floorplan') ORDER BY doc_type DESC, id",
+        (property_id,)).fetchall())
+    db.close()
+    return jsonify({'brochure': row_to_dict(b), 'images': photos})
+
+@app.route('/api/properties/<int:property_id>/brochure', methods=['PUT'])
+@require_auth
+@require_property_access
+def save_brochure(property_id):
+    if g.role not in ('broker', 'agent', 'vendor'):
+        return jsonify({'error': 'You cannot edit the brochure'}), 403
+    data = request.get_json() or {}
+    db = get_db()
+    db.execute('''INSERT INTO brochures (property_id, headline, summary, highlights, hero_doc_id, updated_by, updated_at)
+        VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)
+        ON CONFLICT(property_id) DO UPDATE SET
+            headline=excluded.headline, summary=excluded.summary, highlights=excluded.highlights,
+            hero_doc_id=excluded.hero_doc_id, updated_by=excluded.updated_by, updated_at=CURRENT_TIMESTAMP''',
+        (property_id, data.get('headline'), data.get('summary'), data.get('highlights'),
+         to_int_or_none(data.get('hero_doc_id')), g.user_id))
+    audit(db, property_id, g.user_id, 'brochure_saved', 'brochure', property_id)
+    db.commit()
+    db.close()
+    return jsonify({'message': 'Brochure saved'})
+
+# ══════════════════════════════════════════════════════════════════════════════
 # VALUATIONS (pre-instruction)
 # ══════════════════════════════════════════════════════════════════════════════
 
