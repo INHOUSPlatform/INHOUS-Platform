@@ -687,6 +687,10 @@ def get_feedback(property_id):
             WHERE vf.property_id=? AND vr.requested_by=?
         ''', (property_id, g.user_id)).fetchall())
     db.close()
+    # Expose only whether audio exists, not the server file path
+    for f in feedback:
+        f['has_audio'] = bool(f.get('audio_path'))
+        f.pop('audio_path', None)
     return jsonify(feedback)
 
 @app.route('/api/properties/<int:property_id>/viewings/<int:viewing_id>/feedback', methods=['POST'])
@@ -702,7 +706,7 @@ def submit_feedback(property_id, viewing_id):
     # Update viewing status
     db.execute('UPDATE viewing_requests SET status=?, feedback_submitted_at=CURRENT_TIMESTAMP WHERE id=?',
                ('completed', viewing_id))
-    db.execute('''INSERT INTO viewing_feedback
+    c = db.execute('''INSERT INTO viewing_feedback
         (viewing_id,property_id,submitted_by,interest_level,buyer_type,chain_status,
          budget_range,objections,competing_properties,follow_up_likelihood,comments,broker_note)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''', (
@@ -712,6 +716,7 @@ def submit_feedback(property_id, viewing_id):
         data.get('follow_up_likelihood'), data.get('comments'),
         data.get('broker_note') if g.role == 'broker' else None
     ))
+    feedback_id = c.lastrowid
     # Notify broker
     prop = db.execute('SELECT broker_id FROM properties WHERE id=?', (property_id,)).fetchone()
     notify(db, prop['broker_id'], property_id, 'feedback_received',
@@ -719,7 +724,52 @@ def submit_feedback(property_id, viewing_id):
     audit(db, property_id, g.user_id, 'feedback_submitted', 'viewing', viewing_id)
     db.commit()
     db.close()
-    return jsonify({'message': 'Feedback submitted'}), 201
+    return jsonify({'id': feedback_id, 'message': 'Feedback submitted'}), 201
+
+@app.route('/api/properties/<int:property_id>/feedback/<int:feedback_id>/audio', methods=['POST'])
+@require_auth
+@require_property_access
+def upload_feedback_audio(property_id, feedback_id):
+    if 'file' not in request.files:
+        return jsonify({'error': 'No audio uploaded'}), 400
+    file = request.files['file']
+    db = get_db()
+    fb = db.execute('SELECT * FROM viewing_feedback WHERE id=? AND property_id=?', (feedback_id, property_id)).fetchone()
+    if not fb:
+        db.close()
+        return jsonify({'error': 'Feedback not found'}), 404
+    # Only the submitter (or the broker) may attach audio to a feedback record
+    if g.role != 'broker' and fb['submitted_by'] != g.user_id:
+        db.close()
+        return jsonify({'error': 'You can only attach audio to your own feedback'}), 403
+    ext = os.path.splitext(file.filename or '')[1] or '.webm'
+    safe_name = secrets.token_hex(16) + ext
+    save_dir = os.path.join(UPLOAD_DIR, 'voice_feedback')
+    os.makedirs(save_dir, exist_ok=True)
+    file_path = os.path.join(save_dir, safe_name)
+    file.save(file_path)
+    db.execute('UPDATE viewing_feedback SET audio_path=?, audio_filename=? WHERE id=?',
+               (file_path, file.filename or safe_name, feedback_id))
+    audit(db, property_id, g.user_id, 'feedback_audio_uploaded', 'viewing_feedback', feedback_id)
+    db.commit()
+    db.close()
+    return jsonify({'message': 'Voice feedback uploaded'}), 201
+
+@app.route('/api/properties/<int:property_id>/feedback/<int:feedback_id>/audio', methods=['GET'])
+@require_auth
+@require_property_access
+def get_feedback_audio(property_id, feedback_id):
+    db = get_db()
+    fb = db.execute('SELECT * FROM viewing_feedback WHERE id=? AND property_id=?', (feedback_id, property_id)).fetchone()
+    db.close()
+    if not fb or not fb['audio_path']:
+        return jsonify({'error': 'No audio for this feedback'}), 404
+    # Agents may only hear their own; broker/vendor can hear all
+    if g.role not in ('broker', 'vendor') and fb['submitted_by'] != g.user_id:
+        return jsonify({'error': 'Access denied'}), 403
+    if not os.path.exists(fb['audio_path']):
+        return jsonify({'error': 'Audio file not found on server'}), 404
+    return send_file(fb['audio_path'], mimetype='audio/webm')
 
 # ══════════════════════════════════════════════════════════════════════════════
 # OFFERS

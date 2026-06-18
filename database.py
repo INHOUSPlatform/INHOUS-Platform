@@ -242,6 +242,8 @@ def init_db():
         competing_properties TEXT,
         follow_up_likelihood TEXT,
         comments TEXT,
+        audio_path TEXT,
+        audio_filename TEXT,
         broker_note TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
@@ -350,6 +352,7 @@ def init_db():
     migrations = {
         'properties': [("state_region", "TEXT"), ("currency", "TEXT DEFAULT 'GBP'")],
         'offers': [("inhous_fee", "TEXT"), ("offer_date", "TEXT")],
+        'viewing_feedback': [("audio_path", "TEXT"), ("audio_filename", "TEXT")],
     }
     for table, cols in migrations.items():
         for col, ddl in cols:

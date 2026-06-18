@@ -630,7 +630,7 @@ function ViewingsView({ propId }) {
           )}
           {slots.length === 0 && bookDate && <InfoBox type="amber">No available slots on this date — try another day.</InfoBox>}
           <div className="field"><label>Buyer reference *</label><input value={buyerRef} onChange={e=>setBuyerRef(e.target.value)} placeholder="e.g. Large family — primary residence · cash buyer" /></div>
-          <div className="field"><label>Notes for INHOUS</label><textarea value={buyerNotes} onChange={e=>setBuyerNotes(e.target.value)} placeholder="Any additional context about the buyer…" style={{minHeight:60}} /></div>
+          <div className="field"><label style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>Notes for INHOUS <Dictate onText={t=>setBuyerNotes(v=>(v?v+' ':'')+t)} /></label><textarea value={buyerNotes} onChange={e=>setBuyerNotes(e.target.value)} placeholder="Any additional context about the buyer…" style={{minHeight:60}} /></div>
           {bookError && <div className="error-text" style={{marginBottom:10}}>{bookError}</div>}
           <div style={{display:'flex',gap:8}}>
             <button className="btn btn-primary btn-sm" onClick={doBook} disabled={booking}>{booking?'Booking…':'Confirm booking'}</button>
@@ -699,6 +699,48 @@ function ViewingsView({ propId }) {
   );
 }
 
+function Dictate({ onText }) {
+  const [listening, setListening] = React.useState(false);
+  const recRef = React.useRef(null);
+  const SR = (typeof window !== 'undefined') && (window.SpeechRecognition || window.webkitSpeechRecognition);
+  if (!SR) return null; // browser without speech recognition — hide the control
+  const toggle = () => {
+    if (listening) { try { recRef.current && recRef.current.stop(); } catch(e){} return; }
+    const rec = new SR();
+    rec.lang = 'en-GB'; rec.interimResults = false; rec.continuous = true;
+    rec.onresult = (e) => {
+      let txt = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) txt += e.results[i][0].transcript;
+      if (txt.trim()) onText(txt.trim());
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recRef.current = rec;
+    try { rec.start(); setListening(true); } catch(e){}
+  };
+  return <button type="button" onClick={toggle} title="Dictate with your voice (speech to text)"
+    className="btn btn-sm" style={{padding:'2px 9px',fontSize:11,marginLeft:8,fontWeight:500,
+      color: listening?'#fff':'var(--purple)', background: listening?'var(--red)':'var(--purple-light)',
+      borderColor: listening?'var(--red)':'transparent'}}>
+    {listening ? '● Listening…' : '🎤 Dictate'}</button>;
+}
+
+function FeedbackAudio({ propId, feedbackId }) {
+  const [url, setUrl] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const play = async () => {
+    if (url) return;
+    setLoading(true);
+    try {
+      const tok = localStorage.getItem('inhous_token');
+      const res = await fetch(`${API}/properties/${propId}/feedback/${feedbackId}/audio`, { headers: tok?{Authorization:`Bearer ${tok}`}:{} });
+      if (res.ok) { const b = await res.blob(); setUrl(URL.createObjectURL(b)); }
+    } finally { setLoading(false); }
+  };
+  if (url) return <audio src={url} controls autoPlay style={{height:34,marginTop:8,width:'100%',maxWidth:320}} />;
+  return <button type="button" className="btn btn-sm" style={{marginTop:8}} onClick={play} disabled={loading}>{loading?'Loading…':'▶ Play voice feedback'}</button>;
+}
+
 function FeedbackView({ propId }) {
   const { authApi, user } = useAuth();
   const { prop } = useProperty();
@@ -712,6 +754,11 @@ function FeedbackView({ propId }) {
   const [fbForm, setFbForm] = React.useState({ interest_level:'warm', buyer_type:'', chain_status:'', objections:'', comments:'', broker_note:'' });
   const [saving, setSaving] = React.useState(false);
   const [success, setSuccess] = React.useState('');
+  const [recording, setRecording] = React.useState(false);
+  const [audioBlob, setAudioBlob] = React.useState(null);
+  const [audioURL, setAudioURL] = React.useState(null);
+  const recorderRef = React.useRef(null);
+  const chunksRef = React.useRef([]);
 
   React.useEffect(() => {
     authApi('GET', '/properties').then(ps => {
@@ -720,6 +767,23 @@ function FeedbackView({ propId }) {
       if (pid) loadAll(pid);
     });
   }, [propId]);
+
+  const startRec = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = e => { if (e.data.size>0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type:'audio/webm' });
+        setAudioBlob(blob); setAudioURL(URL.createObjectURL(blob));
+        stream.getTracks().forEach(t=>t.stop());
+      };
+      mr.start(); recorderRef.current = mr; setRecording(true);
+    } catch (err) { alert('Could not access microphone: ' + err.message); }
+  };
+  const stopRec = () => { if (recorderRef.current && recording) { recorderRef.current.stop(); setRecording(false); } };
+  const clearRec = () => { setAudioBlob(null); if (audioURL) URL.revokeObjectURL(audioURL); setAudioURL(null); };
 
   const loadAll = async (pid) => {
     setSelectedProp(pid); setLoading(true);
@@ -736,10 +800,18 @@ function FeedbackView({ propId }) {
     e.preventDefault();
     if (!selectedViewing) return;
     setSaving(true);
-    await authApi('POST', `/properties/${selectedProp}/viewings/${selectedViewing}/feedback`, fbForm).catch(()=>{});
-    setSaving(false); setShowForm(false);
-    setSuccess('Feedback submitted successfully');
-    loadAll(selectedProp);
+    try {
+      const res = await authApi('POST', `/properties/${selectedProp}/viewings/${selectedViewing}/feedback`, fbForm);
+      if (audioBlob && res?.id) {
+        const fd = new FormData();
+        fd.append('file', audioBlob, 'voice-feedback.webm');
+        const tok = localStorage.getItem('inhous_token');
+        await fetch(`${API}/properties/${selectedProp}/feedback/${res.id}/audio`, { method:'POST', headers: tok?{Authorization:`Bearer ${tok}`}:{}, body: fd });
+      }
+      setSuccess('Feedback submitted successfully' + (audioBlob ? ' (with voice note)' : ''));
+      setShowForm(false); clearRec();
+    } catch (err) { /* keep form open on error */ }
+    finally { setSaving(false); loadAll(selectedProp); }
   };
 
   const themes = {};
@@ -805,8 +877,19 @@ function FeedbackView({ propId }) {
                 })}
               </div>
             </div>
-            <div className="field"><label>Comments</label><textarea value={fbForm.comments} onChange={e=>setFbForm({...fbForm,comments:e.target.value})} placeholder="Any additional buyer feedback, questions raised, follow-up likelihood..." style={{minHeight:70}} /></div>
-            {user?.role==='broker' && <div className="field"><label>Broker note (internal — not visible to agents)</label><textarea value={fbForm.broker_note} onChange={e=>setFbForm({...fbForm,broker_note:e.target.value})} placeholder="Your private recommendation or assessment..." style={{minHeight:50}} /></div>}
+            <div className="field"><label style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>Comments <Dictate onText={t=>setFbForm(f=>({...f,comments:(f.comments?f.comments+' ':'')+t}))} /></label><textarea value={fbForm.comments} onChange={e=>setFbForm({...fbForm,comments:e.target.value})} placeholder="Any additional buyer feedback, questions raised, follow-up likelihood..." style={{minHeight:70}} /></div>
+            <div className="field">
+              <label>Voice feedback (optional — record instead of typing)</label>
+              <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:4}}>
+                {!recording && !audioBlob && <button type="button" className="btn btn-sm" onClick={startRec}>● Record</button>}
+                {recording && <button type="button" className="btn btn-sm btn-danger" onClick={stopRec}>■ Stop</button>}
+                {recording && <span style={{fontSize:12,color:'var(--red)'}}>● Recording…</span>}
+                {audioBlob && audioURL && <audio src={audioURL} controls style={{height:34}} />}
+                {audioBlob && <button type="button" className="btn btn-sm" onClick={clearRec}>Re-record</button>}
+              </div>
+              <div style={{fontSize:11,color:'var(--mid)',marginTop:4}}>Recorded audio is attached to this feedback and playable by the broker and vendor.</div>
+            </div>
+            {user?.role==='broker' && <div className="field"><label style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>Broker note (internal — not visible to agents) <Dictate onText={t=>setFbForm(f=>({...f,broker_note:(f.broker_note?f.broker_note+' ':'')+t}))} /></label><textarea value={fbForm.broker_note} onChange={e=>setFbForm({...fbForm,broker_note:e.target.value})} placeholder="Your private recommendation or assessment..." style={{minHeight:50}} /></div>}
             <div style={{display:'flex',gap:8}}>
               <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>{saving?'Saving…':'Submit feedback'}</button>
               <button type="button" className="btn btn-sm" onClick={()=>setShowForm(false)}>Cancel</button>
@@ -836,6 +919,7 @@ function FeedbackView({ propId }) {
             </div>
             {f.objections && <div style={{fontSize:12,color:'var(--mid)',marginBottom:4}}>Objections: {f.objections}</div>}
             {f.comments && <div style={{fontSize:13,marginTop:4}}>{f.comments}</div>}
+            {f.has_audio && <FeedbackAudio propId={selectedProp} feedbackId={f.id} />}
             {f.broker_note && <div style={{marginTop:8,padding:'8px 10px',background:'var(--purple-light)',borderRadius:6,fontSize:12,color:'var(--purple)'}}>Broker note: {f.broker_note}</div>}
           </div>
         ))}</div>
@@ -981,8 +1065,8 @@ function OffersView({ propId }) {
               <div className="field"><label>Buyer solicitor name</label><input value={form.buyer_solicitor_name} onChange={e=>setForm({...form,buyer_solicitor_name:e.target.value})} placeholder="e.g. Sarah Thompson" /></div>
               <div className="field"><label>Buyer solicitor email</label><input type="email" value={form.buyer_solicitor_email} onChange={e=>setForm({...form,buyer_solicitor_email:e.target.value})} /></div>
             </div>
-            <div className="field"><label>Conditions attached</label><textarea value={form.conditions} onChange={e=>setForm({...form,conditions:e.target.value})} placeholder="e.g. Vendors to include as much furnishing as possible in the purchase." style={{minHeight:60}} /></div>
-            <div className="field"><label>Comments</label><textarea value={form.agent_notes} onChange={e=>setForm({...form,agent_notes:e.target.value})} placeholder="Notes for the broker / vendor — e.g. itemised list of inclusions requested" style={{minHeight:60}} /></div>
+            <div className="field"><label style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>Conditions attached <Dictate onText={t=>setForm(f=>({...f,conditions:(f.conditions?f.conditions+' ':'')+t}))} /></label><textarea value={form.conditions} onChange={e=>setForm({...form,conditions:e.target.value})} placeholder="e.g. Vendors to include as much furnishing as possible in the purchase." style={{minHeight:60}} /></div>
+            <div className="field"><label style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>Comments <Dictate onText={t=>setForm(f=>({...f,agent_notes:(f.agent_notes?f.agent_notes+' ':'')+t}))} /></label><textarea value={form.agent_notes} onChange={e=>setForm({...form,agent_notes:e.target.value})} placeholder="Notes for the broker / vendor — e.g. itemised list of inclusions requested" style={{minHeight:60}} /></div>
             <OfferDocsCard propId={selectedProp} />
             {error && <div className="error-text" style={{marginBottom:10}}>{error}</div>}
             <div style={{display:'flex',gap:8}}>
@@ -1671,7 +1755,7 @@ function PartiesPanel({ propId }) {
                 </select>
               </div>
               <div className="field"><label>Agency / firm name</label><input value={invForm.agency_name} onChange={e=>setInvForm({...invForm,agency_name:e.target.value})} placeholder="e.g. Knight Frank, M. Singh & Co" /></div>
-              <div className="field"><label>Personal message (optional)</label><input value={invForm.message} onChange={e=>setInvForm({...invForm,message:e.target.value})} placeholder="e.g. Please log in to upload AML documents" /></div>
+              <div className="field"><label style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>Personal message (optional) <Dictate onText={t=>setInvForm(f=>({...f,message:(f.message?f.message+' ':'')+t}))} /></label><input value={invForm.message} onChange={e=>setInvForm({...invForm,message:e.target.value})} placeholder="e.g. Please log in to upload AML documents" /></div>
             </div>
             {inviteResult && <div style={{fontSize:12,marginBottom:8,color:inviteResult.startsWith('✓')?'var(--green)':'var(--red)',wordBreak:'break-all'}}>{inviteResult}</div>}
             <div style={{display:'flex',gap:8}}>
