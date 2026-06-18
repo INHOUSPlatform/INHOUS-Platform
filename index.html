@@ -1887,11 +1887,65 @@ function IntroductionsView({ propId }) {
   );
 }
 
+const ROLE_LABELS = { broker:'INHOUS broker', vendor:'Vendor', agent:'Agent', vendor_solicitor:'Vendor solicitor', buyer_solicitor:'Buyer solicitor', buyer:'Buyer', family_office:'Family office' };
+
+function ParticipantsView({ propId }) {
+  const { authApi } = useAuth();
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(()=>{ authApi('GET',`/properties/${propId}/participants`).then(setData).catch(()=>{}).finally(()=>setLoading(false)); }, [propId]);
+  if (loading) return <div><PageHeader title="Participants" subtitle="Everyone involved in this transaction" /><Spinner/></div>;
+  const isBroker = data?.is_broker;
+  const people = data?.people || [];
+  const tps = data?.third_parties || [];
+  return (
+    <div>
+      <PageHeader title="Participants" subtitle="Everyone involved in this transaction" />
+      {!isBroker && <InfoBox type="purple" label="Note">You can see who is involved by name and firm. Full contact details are held securely by your INHOUS broker.</InfoBox>}
+      <div className="card" style={{marginBottom:16}}>
+        <table className="table">
+          <thead><tr><th>Name</th><th>Role</th><th>Firm / agency</th>{isBroker && <><th>Email</th><th>Phone</th></>}</tr></thead>
+          <tbody>
+            {people.map((p,i)=>(
+              <tr key={i}>
+                <td style={{fontWeight:500}}>{p.full_name}</td>
+                <td><span className="badge badge-blue">{ROLE_LABELS[p.role]||p.role}</span></td>
+                <td style={{fontSize:12,color:'var(--mid)'}}>{p.agency_name||'—'}</td>
+                {isBroker && <><td style={{fontSize:12}}>{p.email||'—'}</td><td style={{fontSize:12}}>{p.phone||'—'}</td></>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {tps.length>0 && (
+        <div>
+          <div style={{fontSize:12,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Third-party services engaged</div>
+          <div className="card">
+            <table className="table">
+              <thead><tr><th>Company</th><th>Service</th>{isBroker && <><th>Contact</th><th>Email</th><th>Phone</th></>}</tr></thead>
+              <tbody>
+                {tps.map((t,i)=>(
+                  <tr key={i}>
+                    <td style={{fontWeight:500}}>{t.company_name}</td>
+                    <td><span className="badge badge-gray">{INTRO_CATS[t.category]||t.category}</span></td>
+                    {isBroker && <><td style={{fontSize:12}}>{t.contact_name||'—'}</td><td style={{fontSize:12}}>{t.contact_email||'—'}</td><td style={{fontSize:12}}>{t.contact_phone||'—'}</td></>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PropertyShell({ prop, page, setPage, onBack, children }) {
   const { user } = useAuth();
   const sym = {GBP:'£',EUR:'€',USD:'$',CHF:'CHF ',AED:'AED '}[prop.currency||'GBP'] || '£';
   const tabs = [
     { id:'property', label:'Overview', roles:['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
+    { id:'participants', label:'Participants', roles:['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
     { id:'viewings', label:'Viewings', roles:['broker','vendor','agent'] },
     { id:'feedback', label:'Feedback', roles:['broker','vendor','agent'] },
     { id:'offers', label:'Offers', roles:['broker','vendor','agent'] },
@@ -1953,13 +2007,14 @@ function App() {
     documents:<DocumentsView propId={activeProperty?.id}/>,
     aml:<AMLView propId={activeProperty?.id}/>,
     photography:<PhotographyView propId={activeProperty?.id}/>,
+    participants:<ParticipantsView propId={activeProperty?.id}/>,
     introductions:<IntroductionsView propId={activeProperty?.id}/>,
     notifications:<NotificationsView/>,
     admin:<AdminView/>
   };
 
   const content = views[page] || <DashboardView openProperty={openProperty}/>;
-  const inFolder = activeProperty && ['viewings','feedback','offers','documents','aml','photography','introductions'].includes(page);
+  const inFolder = activeProperty && ['participants','viewings','feedback','offers','documents','aml','photography','introductions'].includes(page);
 
   return (
     <PropertyContext.Provider value={{ prop: activeProperty, openProperty }}>

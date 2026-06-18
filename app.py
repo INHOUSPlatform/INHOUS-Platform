@@ -1233,6 +1233,49 @@ def get_property_access(property_id):
     db.close()
     return jsonify(access)
 
+@app.route('/api/properties/<int:property_id>/participants', methods=['GET'])
+@require_auth
+@require_property_access
+def get_participants(property_id):
+    """Everyone involved in the transaction. INHOUS (broker) sees full contact
+    details; external parties see names / firms only."""
+    is_broker = (g.role == 'broker')
+    db = get_db()
+    rows = db.execute('''
+        SELECT u.id, u.full_name, pa.role AS role, u.agency_name, u.email, u.phone
+        FROM property_access pa JOIN users u ON pa.user_id=u.id
+        WHERE pa.property_id=? ORDER BY pa.role, u.full_name
+    ''', (property_id,)).fetchall()
+    people = []
+    seen = set()
+    # The managing INHOUS broker first
+    bk = db.execute('SELECT u.full_name, u.agency_name, u.email, u.phone FROM properties p JOIN users u ON p.broker_id=u.id WHERE p.id=?', (property_id,)).fetchone()
+    if bk:
+        b = {'full_name': bk['full_name'], 'role': 'broker', 'agency_name': bk['agency_name'] or 'INHOUS'}
+        if is_broker: b['email'] = bk['email']; b['phone'] = bk['phone']
+        people.append(b); seen.add((bk['full_name'], 'broker'))
+    for r in rows:
+        if (r['full_name'], r['role']) in seen:
+            continue
+        seen.add((r['full_name'], r['role']))
+        p = {'full_name': r['full_name'], 'role': r['role'], 'agency_name': r['agency_name']}
+        if is_broker: p['email'] = r['email']; p['phone'] = r['phone']
+        people.append(p)
+    # Third-party services engaged on this property (via a referral event)
+    tp_rows = db.execute('''
+        SELECT DISTINCT rp.company_name, rp.category, rp.contact_name, rp.contact_email, rp.contact_phone
+        FROM referral_events re JOIN referral_partners rp ON re.partner_id=rp.id
+        WHERE re.property_id=? ORDER BY rp.category, rp.company_name
+    ''', (property_id,)).fetchall()
+    third_parties = []
+    for r in tp_rows:
+        tp = {'company_name': r['company_name'], 'category': r['category']}
+        if is_broker:
+            tp['contact_name'] = r['contact_name']; tp['contact_email'] = r['contact_email']; tp['contact_phone'] = r['contact_phone']
+        third_parties.append(tp)
+    db.close()
+    return jsonify({'is_broker': is_broker, 'people': people, 'third_parties': third_parties})
+
 # ══════════════════════════════════════════════════════════════════════════════
 # HEALTH + SEED DATA
 # ══════════════════════════════════════════════════════════════════════════════
