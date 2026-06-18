@@ -955,9 +955,10 @@ def get_aml(property_id):
         'SELECT ar.*, u.full_name as certified_by_name FROM aml_records ar LEFT JOIN users u ON ar.certified_by=u.id WHERE ar.property_id=?',
         (property_id,)
     ).fetchall())
-    # Agents see status only — never documents or full records
+    # Instructed agents can see the VENDOR's AML/KYC (needed to market the property),
+    # but never buyer-side AML (that belongs to a specific competing offer).
     if g.role == 'agent':
-        records = [{'party_type': r['party_type'], 'status': r['status'], 'person_name': 'Verified' if r['status'] == 'certified' else 'Pending'} for r in records if r['party_type'] == 'vendor']
+        records = [r for r in records if r['party_type'] == 'vendor']
     db.close()
     return jsonify(records)
 
@@ -1002,7 +1003,7 @@ def get_documents(property_id):
     role_visible = {
         'broker': None,  # all
         'vendor': ('photo','floorplan','epc','brochure','memo_of_sale','agent_terms'),
-        'agent': ('photo','floorplan','epc','agent_brochure','memo_of_sale','agent_terms'),
+        'agent': ('photo','floorplan','epc','agent_brochure','memo_of_sale','agent_terms','aml_vendor','aml_verification'),
         'vendor_solicitor': ('aml_vendor','aml_verification','title_register','planning','memo_of_sale','epc','proof_of_funds'),
         'buyer_solicitor': ('aml_buyer','aml_verification','title_register','planning','memo_of_sale','epc','proof_of_funds','survey'),
         'buyer': ('memo_of_sale','epc','brochure'),
