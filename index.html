@@ -1888,6 +1888,95 @@ function IntroductionsView({ propId }) {
 }
 
 const ROLE_LABELS = { broker:'INHOUS broker', vendor:'Vendor', agent:'Agent', vendor_solicitor:'Vendor solicitor', buyer_solicitor:'Buyer solicitor', buyer:'Buyer', family_office:'Family office' };
+const CURRENCY_SYM = { GBP:'£', EUR:'€', USD:'$', CHF:'CHF ', AED:'AED ' };
+
+function ValuationsView({ propId }) {
+  const { authApi, user } = useAuth();
+  const { prop } = useProperty();
+  const [vals, setVals] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [showForm, setShowForm] = React.useState(false);
+  const blank = { valuation_amount:'', suggested_asking_price:'', recommended_fee:'', estimated_timeframe:'', marketing_strategy:'', comments:'' };
+  const [form, setForm] = React.useState(blank);
+  const [msg, setMsg] = React.useState(null);
+  const [saving, setSaving] = React.useState(false);
+  const sym = CURRENCY_SYM[prop?.currency||'GBP'] || '£';
+  const money = (n) => n ? `${sym}${Number(n).toLocaleString()}` : '—';
+
+  const load = () => { authApi('GET',`/properties/${propId}/valuations`).then(v=>setVals(v||[])).catch(()=>{}).finally(()=>setLoading(false)); };
+  React.useEffect(()=>{ load(); }, [propId]);
+
+  const submit = async (e) => {
+    e.preventDefault(); setSaving(true); setMsg(null);
+    try {
+      await authApi('POST',`/properties/${propId}/valuations`, {...form, valuation_amount:parseInt(form.valuation_amount)||null, suggested_asking_price:parseInt(form.suggested_asking_price)||null});
+      setShowForm(false); setForm(blank); setMsg({ok:true,text:'Valuation submitted.'}); load();
+    } catch(err){ setMsg({ok:false,text:err.message}); } finally { setSaving(false); }
+  };
+
+  const amounts = vals.map(v=>v.valuation_amount).filter(Boolean);
+  const avg = amounts.length ? Math.round(amounts.reduce((a,b)=>a+b,0)/amounts.length) : 0;
+  const hi = amounts.length ? Math.max(...amounts) : 0;
+  const lo = amounts.length ? Math.min(...amounts) : 0;
+  const isAgent = user?.role === 'agent';
+  const mine = isAgent && vals.length > 0;
+
+  return (
+    <div>
+      <PageHeader title="Valuations" subtitle="Pre-instruction agent valuations"
+        actions={isAgent && !mine && <button className="btn btn-primary btn-sm" onClick={()=>setShowForm(!showForm)}>+ Submit valuation</button>} />
+      {msg && <InfoBox type={msg.ok?'green':'red'}>{msg.text}</InfoBox>}
+      {isAgent && <InfoBox type="purple" label="Agent">Submit your market appraisal for this property. You can see only your own valuation; the vendor and INHOUS see all submissions side by side.</InfoBox>}
+
+      {showForm && isAgent && (
+        <div className="card" style={{marginBottom:16}}>
+          <h3 style={{fontSize:15,marginBottom:12}}>Your valuation</h3>
+          <form onSubmit={submit}>
+            <div className="grid2">
+              <div className="field"><label>Valuation ({sym.trim()}) *</label><input type="number" value={form.valuation_amount} onChange={e=>setForm({...form,valuation_amount:e.target.value})} placeholder="e.g. 6500000" required /></div>
+              <div className="field"><label>Suggested asking price</label><input type="number" value={form.suggested_asking_price} onChange={e=>setForm({...form,suggested_asking_price:e.target.value})} placeholder="e.g. 6750000" /></div>
+              <div className="field"><label>Recommended fee</label><input value={form.recommended_fee} onChange={e=>setForm({...form,recommended_fee:e.target.value})} placeholder="e.g. 1.25% + VAT" /></div>
+              <div className="field"><label>Estimated time to sell</label><input value={form.estimated_timeframe} onChange={e=>setForm({...form,estimated_timeframe:e.target.value})} placeholder="e.g. 8-12 weeks" /></div>
+            </div>
+            <div className="field"><label>Marketing strategy</label><textarea value={form.marketing_strategy} onChange={e=>setForm({...form,marketing_strategy:e.target.value})} placeholder="Channels, target buyers, launch plan…" style={{minHeight:60}} /></div>
+            <div className="field"><label>Comments</label><textarea value={form.comments} onChange={e=>setForm({...form,comments:e.target.value})} placeholder="Rationale for your valuation…" style={{minHeight:50}} /></div>
+            <div style={{display:'flex',gap:8}}><button type="submit" className="btn btn-primary btn-sm" disabled={saving}>{saving?'Submitting…':'Submit valuation'}</button><button type="button" className="btn btn-sm" onClick={()=>setShowForm(false)}>Cancel</button></div>
+          </form>
+        </div>
+      )}
+
+      {!isAgent && amounts.length>0 && (
+        <div className="stat-grid">
+          <div className="stat"><div className="stat-val">{vals.length}</div><div className="stat-lbl">Valuations</div></div>
+          <div className="stat"><div className="stat-val">{money(avg)}</div><div className="stat-lbl">Average</div></div>
+          <div className="stat"><div className="stat-val">{money(hi)}</div><div className="stat-lbl">Highest</div></div>
+          <div className="stat"><div className="stat-val">{money(lo)}</div><div className="stat-lbl">Lowest</div></div>
+        </div>
+      )}
+
+      {loading ? <Spinner/> : vals.length===0 ? (
+        <div className="empty"><div className="empty-icon">📊</div><div>{isAgent?'You have not submitted a valuation yet':'No valuations submitted yet'}</div></div>
+      ) : (
+        <div>{vals.map(v=>(
+          <div key={v.id} className="card" style={{marginBottom:10}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+              <div>
+                <div style={{fontWeight:500,fontSize:14}}>{v.agency_name||'—'}{!isAgent&&v.negotiator_name?` · ${v.negotiator_name}`:''}</div>
+                <div style={{fontSize:12,color:'var(--mid)',marginTop:2}}>{v.recommended_fee?`Fee: ${v.recommended_fee}`:''}{v.estimated_timeframe?`  ·  ${v.estimated_timeframe}`:''}</div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:18,fontWeight:600,color:'var(--purple)'}}>{money(v.valuation_amount)}</div>
+                {v.suggested_asking_price ? <div style={{fontSize:11,color:'var(--mid)'}}>asking {money(v.suggested_asking_price)}</div> : null}
+              </div>
+            </div>
+            {v.marketing_strategy && <div style={{fontSize:12,marginTop:6}}><b>Strategy:</b> {v.marketing_strategy}</div>}
+            {v.comments && <div style={{fontSize:12,color:'var(--mid)',marginTop:4}}>{v.comments}</div>}
+          </div>
+        ))}</div>
+      )}
+    </div>
+  );
+}
 
 function ParticipantsView({ propId }) {
   const { authApi } = useAuth();
@@ -1946,6 +2035,7 @@ function PropertyShell({ prop, page, setPage, onBack, children }) {
   const tabs = [
     { id:'property', label:'Overview', roles:['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
     { id:'participants', label:'Participants', roles:['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
+    { id:'valuations', label:'Valuations', roles:['broker','vendor','agent'] },
     { id:'viewings', label:'Viewings', roles:['broker','vendor','agent'] },
     { id:'feedback', label:'Feedback', roles:['broker','vendor','agent'] },
     { id:'offers', label:'Offers', roles:['broker','vendor','agent'] },
@@ -2008,13 +2098,14 @@ function App() {
     aml:<AMLView propId={activeProperty?.id}/>,
     photography:<PhotographyView propId={activeProperty?.id}/>,
     participants:<ParticipantsView propId={activeProperty?.id}/>,
+    valuations:<ValuationsView propId={activeProperty?.id}/>,
     introductions:<IntroductionsView propId={activeProperty?.id}/>,
     notifications:<NotificationsView/>,
     admin:<AdminView/>
   };
 
   const content = views[page] || <DashboardView openProperty={openProperty}/>;
-  const inFolder = activeProperty && ['participants','viewings','feedback','offers','documents','aml','photography','introductions'].includes(page);
+  const inFolder = activeProperty && ['participants','valuations','viewings','feedback','offers','documents','aml','photography','introductions'].includes(page);
 
   return (
     <PropertyContext.Provider value={{ prop: activeProperty, openProperty }}>

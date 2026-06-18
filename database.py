@@ -348,6 +348,22 @@ def init_db():
         last_accessed_at DATETIME
     )''')
 
+    # ── VALUATIONS (pre-instruction valuations from agents) ───────────────────
+    c.execute('''CREATE TABLE IF NOT EXISTS valuations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        property_id INTEGER NOT NULL REFERENCES properties(id),
+        submitted_by INTEGER REFERENCES users(id),
+        agency_name TEXT,
+        negotiator_name TEXT,
+        valuation_amount INTEGER,
+        suggested_asking_price INTEGER,
+        recommended_fee TEXT,
+        estimated_timeframe TEXT,
+        marketing_strategy TEXT,
+        comments TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )''')
+
     # ── Schema migrations: add new columns to pre-existing tables (idempotent) ──
     migrations = {
         'properties': [("state_region", "TEXT"), ("currency", "TEXT DEFAULT 'GBP'")],

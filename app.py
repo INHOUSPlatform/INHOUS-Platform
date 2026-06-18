@@ -1277,6 +1277,56 @@ def get_participants(property_id):
     return jsonify({'is_broker': is_broker, 'people': people, 'third_parties': third_parties})
 
 # ══════════════════════════════════════════════════════════════════════════════
+# VALUATIONS (pre-instruction)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/api/properties/<int:property_id>/valuations', methods=['GET'])
+@require_auth
+@require_property_access
+def get_valuations(property_id):
+    db = get_db()
+    if g.role in ('broker', 'vendor'):
+        rows = rows_to_list(db.execute(
+            'SELECT * FROM valuations WHERE property_id=? ORDER BY valuation_amount DESC', (property_id,)).fetchall())
+    else:
+        # agents see only their own valuation
+        rows = rows_to_list(db.execute(
+            'SELECT * FROM valuations WHERE property_id=? AND submitted_by=?', (property_id, g.user_id)).fetchall())
+    db.close()
+    return jsonify(rows)
+
+@app.route('/api/properties/<int:property_id>/valuations', methods=['POST'])
+@require_auth
+@require_property_access
+def submit_valuation(property_id):
+    data = request.get_json() or {}
+    amount = to_int_or_none(data.get('valuation_amount'))
+    if amount is None:
+        return jsonify({'error': 'Valuation amount is required'}), 400
+    db = get_db()
+    if g.role == 'agent':
+        u = db.execute('SELECT full_name, agency_name FROM users WHERE id=?', (g.user_id,)).fetchone()
+        agency = u['agency_name'] or data.get('agency_name', '')
+        negotiator = u['full_name']
+    else:
+        agency = data.get('agency_name', 'INHOUS')
+        negotiator = data.get('negotiator_name', '')
+    c = db.execute('''INSERT INTO valuations
+        (property_id, submitted_by, agency_name, negotiator_name, valuation_amount,
+         suggested_asking_price, recommended_fee, estimated_timeframe, marketing_strategy, comments)
+        VALUES (?,?,?,?,?,?,?,?,?,?)''', (
+        property_id, g.user_id, agency, negotiator, amount,
+        to_int_or_none(data.get('suggested_asking_price')), data.get('recommended_fee'),
+        data.get('estimated_timeframe'), data.get('marketing_strategy'), data.get('comments')))
+    prop = db.execute('SELECT broker_id, currency FROM properties WHERE id=?', (property_id,)).fetchone()
+    notify(db, prop['broker_id'], property_id, 'valuation_received',
+           f"Valuation received — {agency}", fmt_money(amount, prop['currency']))
+    audit(db, property_id, g.user_id, 'valuation_submitted', 'valuation', c.lastrowid)
+    db.commit()
+    db.close()
+    return jsonify({'id': c.lastrowid, 'message': 'Valuation submitted'}), 201
+
+# ══════════════════════════════════════════════════════════════════════════════
 # HEALTH + SEED DATA
 # ══════════════════════════════════════════════════════════════════════════════
 
