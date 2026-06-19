@@ -57,6 +57,32 @@ def to_int_or_none(value):
     except (TypeError, ValueError):
         return None
 
+# Which document types each role may see. None = all (broker).
+ROLE_VISIBLE_DOCS = {
+    'broker': None,
+    'vendor': ('photo','floorplan','epc','brochure','memo_of_sale','agent_terms'),
+    'agent': ('photo','floorplan','epc','agent_brochure','memo_of_sale','agent_terms','aml_vendor','aml_verification'),
+    'vendor_solicitor': ('aml_vendor','aml_verification','title_register','planning','memo_of_sale','epc','proof_of_funds'),
+    'buyer_solicitor': ('aml_buyer','aml_verification','title_register','planning','memo_of_sale','epc','proof_of_funds','survey'),
+    'buyer': ('memo_of_sale','epc','brochure'),
+    'family_office': ('brochure','epc'),
+    'photographer': ('photo','floorplan','epc'),
+}
+
+def can_view_document(role, doc):
+    """True if a role may access a specific document (broker=all, own uploads always,
+    otherwise role-visible types; agents never get the master brochure)."""
+    if role == 'broker':
+        return True
+    if doc['uploaded_by'] == g.user_id:
+        return True
+    allowed = ROLE_VISIBLE_DOCS.get(role)
+    if allowed is None:
+        return True
+    if role == 'agent' and doc['doc_type'] == 'brochure':
+        return False
+    return doc['doc_type'] in allowed
+
 def notify(db, user_id, property_id, type_, title, message='', action_url=''):
     db.execute(
         'INSERT INTO notifications (user_id,property_id,type,title,message,action_url) VALUES (?,?,?,?,?,?)',
@@ -898,7 +924,7 @@ def offer_action(property_id, offer_id):
         updates['declined_at'] = datetime.datetime.utcnow().isoformat()
         updates['declined_reason'] = data.get('reason','')
     elif action == 'counter':
-        updates['counter_amount'] = data.get('counter_amount')
+        updates['counter_amount'] = to_int_or_none(data.get('counter_amount'))
         updates['counter_notes'] = data.get('counter_notes','')
     set_clause = ', '.join(f'{k}=?' for k in updates)
     db.execute(f'UPDATE offers SET {set_clause}, updated_at=CURRENT_TIMESTAMP WHERE id=?',
@@ -950,6 +976,9 @@ def _trigger_acceptance_workflow(db, property_id, offer_id, offer, currency='GBP
 @require_auth
 @require_property_access
 def get_aml(property_id):
+    # AML/KYC is sensitive identity data — only roles that need it may read it.
+    if g.role not in ('broker', 'vendor_solicitor', 'buyer_solicitor', 'agent'):
+        return jsonify({'error': 'Access denied'}), 403
     db = get_db()
     records = rows_to_list(db.execute(
         'SELECT ar.*, u.full_name as certified_by_name FROM aml_records ar LEFT JOIN users u ON ar.certified_by=u.id WHERE ar.property_id=?',
@@ -999,18 +1028,7 @@ def certify_aml(property_id, aml_id):
 @require_property_access
 def get_documents(property_id):
     db = get_db()
-    # Role-based document filtering
-    role_visible = {
-        'broker': None,  # all
-        'vendor': ('photo','floorplan','epc','brochure','memo_of_sale','agent_terms'),
-        'agent': ('photo','floorplan','epc','agent_brochure','memo_of_sale','agent_terms','aml_vendor','aml_verification'),
-        'vendor_solicitor': ('aml_vendor','aml_verification','title_register','planning','memo_of_sale','epc','proof_of_funds'),
-        'buyer_solicitor': ('aml_buyer','aml_verification','title_register','planning','memo_of_sale','epc','proof_of_funds','survey'),
-        'buyer': ('memo_of_sale','epc','brochure'),
-        'family_office': ('brochure','epc'),
-        'photographer': ('photo','floorplan','epc'),
-    }
-    allowed = role_visible.get(g.role)
+    allowed = ROLE_VISIBLE_DOCS.get(g.role)
     if allowed:
         placeholders = ','.join('?' for _ in allowed)
         # Role-visible doc types OR any document the user uploaded themselves
@@ -1066,6 +1084,8 @@ def download_document(property_id, doc_id):
     db.close()
     if not doc:
         return jsonify({'error': 'Document not found'}), 404
+    if not can_view_document(g.role, doc):
+        return jsonify({'error': 'You do not have access to this document'}), 403
     if not doc['file_path'] or not os.path.exists(doc['file_path']):
         return jsonify({'error': 'File not found on server'}), 404
     return send_file(doc['file_path'], as_attachment=True, download_name=doc['original_filename'] or doc['filename'])
@@ -1424,7 +1444,10 @@ def serve(path):
     return jsonify({'message': 'INHOUS Platform API v1.0'}), 200
 
 if __name__ == '__main__':
+    from database import add_referral_tables, relax_user_roles
     init_db()
+    relax_user_roles()
+    add_referral_tables()
     print("INHOUS Platform starting on http://localhost:5001")
     app.run(host='0.0.0.0', port=5001, debug=True)
 
@@ -1503,8 +1526,8 @@ def acknowledge_disclosure(property_id):
     data = request.get_json()
     category = data.get('category')
     partner_id = data.get('partner_id')
-    if not category:
-        return jsonify({'error': 'Category required'}), 400
+    if not category or not partner_id:
+        return jsonify({'error': 'Category and partner_id are required'}), 400
     db = get_db()
     # Check if already acknowledged for this category/property
     existing = db.execute(

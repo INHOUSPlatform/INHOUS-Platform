@@ -16,7 +16,7 @@
     --purple: #534AB7; --purple-light: #EEEDFE; --green: #1D9E75;
     --green-light: #EAF3DE; --amber: #BA7517; --amber-light: #FAEEDA;
     --red: #E24B4A; --red-light: #FCEBEB; --blue: #185FA5; --blue-light: #E6F1FB;
-    --radius: 10px; --radius-sm: 6px; --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+    --radius: 10px; --radius-sm: 6px; --border-radius-lg: 14px; --teal: #0E7C86; --teal-light: #E0F2F1; --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Inter', sans-serif; background: var(--cream); color: var(--dark); font-size: 14px; min-height: 100vh; }
@@ -38,6 +38,7 @@
   .badge-blue { background: var(--blue-light); color: #0C447C; }
   .badge-gray { background: var(--light); color: var(--mid); border: 1px solid var(--border); }
   .badge-red { background: var(--red-light); color: #791F1F; }
+  .badge-teal { background: var(--teal-light); color: #0E5A62; }
   .card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
   .field { margin-bottom: 14px; }
   .field label { display: block; font-size: 12px; font-weight: 500; color: var(--mid); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -54,6 +55,7 @@
   .info-green { background: var(--green-light); border-color: var(--green); color: #27500A; }
   .info-amber { background: var(--amber-light); border-color: var(--amber); color: #633806; }
   .info-red { background: var(--red-light); border-color: var(--red); color: #791F1F; }
+  .info-gold { background: #F7F1E6; border-color: var(--gold); color: #6B5326; }
   .info-label { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
   .info-text { font-size: 12px; line-height: 1.6; }
   .divider { height: 1px; background: var(--border); margin: 16px 0; }
@@ -541,10 +543,8 @@ function ViewingsView({ propId }) {
   const loadProperty = async (pid) => {
     setSelectedProp(pid);
     setLoading(true);
-    const [v, a] = await Promise.all([
-      authApi('GET', `/properties/${pid}/viewings`),
-      authApi('GET', `/properties/${pid}/availability`),
-    ]).catch(()=>[[], null]);
+    const v = await authApi('GET', `/properties/${pid}/viewings`).catch(()=>[]);
+    const a = await authApi('GET', `/properties/${pid}/availability`).catch(()=>null);
     setViewings(v || []);
     setAvailability(a);
     setLoading(false);
@@ -1120,7 +1120,7 @@ function OffersView({ propId }) {
                 <div style={{display:'flex',gap:6,marginTop:8}}>
                   <button className="btn btn-sm btn-green" onClick={()=>doAction(offer.id,'accept')}>Accept offer</button>
                   <button className="btn btn-sm" onClick={()=>doAction(offer.id,'decline')}>Decline</button>
-                  <button className="btn btn-sm btn-primary" onClick={()=>doAction(offer.id,'counter',{counter_amount:offer.amount*0.98,counter_notes:'Counter at adjusted figure'})}>Counter</button>
+                  <button className="btn btn-sm btn-primary" onClick={()=>doAction(offer.id,'counter',{counter_amount:Math.round(offer.amount*0.98),counter_notes:'Counter at adjusted figure'})}>Counter</button>
                 </div>
               )}
               {offer.status==='accepted' && (
@@ -1346,7 +1346,7 @@ function AMLView({ propId }) {
   return (
     <div>
       <PageHeader title="AML / KYC" subtitle="Identity verification records"
-        actions={['broker','vendor_solicitor'].includes(user?.role) && <button className="btn btn-primary btn-sm" onClick={()=>setShowForm(!showForm)}>+ Add record</button>} />
+        actions={['broker','vendor_solicitor','buyer_solicitor'].includes(user?.role) && <button className="btn btn-primary btn-sm" onClick={()=>setShowForm(!showForm)}>+ Add record</button>} />
 
       {user?.role === 'agent' && (
         <InfoBox type="amber" label="Agent access — status only">
@@ -1395,10 +1395,15 @@ function AMLView({ propId }) {
                       <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{display:'none'}}
                         onChange={async(e)=>{
                           const file = e.target.files[0]; if(!file) return;
-                          const fd = new FormData(); fd.append('file',file); fd.append('doc_type','aml_vendor'); fd.append('description',`${r.person_name} — ${docType}`);
+                          const fd = new FormData(); fd.append('file',file); fd.append('doc_type', r.party_type==='buyer'?'aml_buyer':'aml_vendor'); fd.append('description',`${r.person_name} — ${docType}`);
                           const tok = localStorage.getItem('inhous_token');
-                          await fetch(API+`/properties/${selectedProp}/documents`,{method:'POST',headers:{'Authorization':`Bearer ${tok}`},body:fd});
-                          alert(`${docType} uploaded for ${r.person_name}`);
+                          try {
+                            const res = await fetch(API+`/properties/${selectedProp}/documents`,{method:'POST',headers:{'Authorization':`Bearer ${tok}`},body:fd});
+                            if(!res.ok) throw new Error('Upload failed ('+res.status+')');
+                            alert(`${docType} uploaded for ${r.person_name}`);
+                            load(selectedProp);
+                          } catch(err){ alert('Upload failed: '+err.message); }
+                          finally { e.target.value=''; }
                         }} />
                       <i className="ti ti-upload" style={{marginRight:4,fontSize:13}} aria-hidden="true"></i>{docType}
                     </label>
@@ -1644,6 +1649,7 @@ function PropertyView({ onBack, setPage }) {
   };
   const currency = prop.currency || 'GBP';
   const currencySymbol = {GBP:'£',EUR:'€',USD:'$',CHF:'CHF ',AED:'AED ',Other:''}[currency] || '£';
+  const energyType = ((prop.notes||'').match(/Energy rating type:\s*(\w+)/) || [])[1] || 'EPC';
 
   const modules = [
     { id:'photography', label:'Photography', icon:'ti-camera', roles:['broker','vendor'] },
@@ -1662,7 +1668,7 @@ function PropertyView({ onBack, setPage }) {
         <button className="btn btn-sm" onClick={onBack}>← Properties</button>
         <div style={{flex:1}}>
           <h2 style={{fontSize:22,fontFamily:"'Cormorant Garamond', serif",fontWeight:500}}>{prop.address_line1}{prop.address_line2?`, ${prop.address_line2}`:''}</h2>
-          <div style={{fontSize:12,color:'var(--mid)'}}>{prop.city}{prop.state?`, ${prop.state}`:''} · {prop.country}</div>
+          <div style={{fontSize:12,color:'var(--mid)'}}>{prop.city}{prop.state_region?`, ${prop.state_region}`:''} · {prop.country}</div>
         </div>
         <Badge status={prop.status} />
       </div>
@@ -1671,7 +1677,7 @@ function PropertyView({ onBack, setPage }) {
         <div className="stat"><div className="stat-val">{prop.guide_price ? `${currencySymbol}${(prop.guide_price/1000000).toFixed(2)}m` : '—'}</div><div className="stat-lbl">Guide price</div></div>
         <div className="stat"><div className="stat-val">{prop.bedrooms || '—'}</div><div className="stat-lbl">Bedrooms</div></div>
         <div className="stat"><div className="stat-val">{prop.floor_area_sqft ? prop.floor_area_sqft.toLocaleString() : '—'}</div><div className="stat-lbl">Sq ft</div></div>
-        <div className="stat"><div className="stat-val">{prop.epc_rating || '—'}</div><div className="stat-lbl">{prop.energy_rating_type || 'EPC'} rating</div></div>
+        <div className="stat"><div className="stat-val">{prop.epc_rating || '—'}</div><div className="stat-lbl">{energyType} rating</div></div>
       </div>
 
       <div className="card" style={{marginBottom:16}}>
@@ -1679,7 +1685,7 @@ function PropertyView({ onBack, setPage }) {
           {prop.tenure && <span className="badge badge-gray">{prop.tenure}</span>}
           {prop.year_built && <span className="badge badge-gray">Built {prop.year_built}</span>}
           <Badge status={prop.sale_mode} />
-          {prop.epc_rating && <span className="badge badge-green">{prop.energy_rating_type||'EPC'} {prop.epc_rating}</span>}
+          {prop.epc_rating && <span className="badge badge-green">{energyType} {prop.epc_rating}</span>}
         </div>
         {detail?.price_log?.length > 0 && (
           <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border)'}}>
