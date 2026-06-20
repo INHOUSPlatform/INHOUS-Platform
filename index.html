@@ -650,6 +650,7 @@ function ViewingsView({ propId }) {
   const [bookError, setBookError] = React.useState('');
   const [booking, setBooking] = React.useState(false);
   const [success, setSuccess] = React.useState('');
+  const [statusFilter, setStatusFilter] = React.useState(null);
 
   const single = selectedProps.length===1 ? selectedProps[0] : null;
   const loadAll = () => authApi('GET', '/viewings').then(v=>setAllViewings(v||[])).catch(()=>{});
@@ -690,6 +691,10 @@ function ViewingsView({ propId }) {
     await authApi('POST', `/properties/${selectedProp}/viewings/${viewingId}/confirm`, {action}).catch(()=>{});
     loadProperty(selectedProp); loadAll();
   };
+  const doConfirmAny = async (pid, viewingId, action) => {
+    await authApi('POST', `/properties/${pid}/viewings/${viewingId}/confirm`, {action}).catch(()=>{});
+    loadAll(); if (single) loadProperty(single);
+  };
   const toggleProp = (pid) => setSelectedProps(s => s.includes(pid) ? s.filter(x=>x!==pid) : [...s, pid]);
 
   const filtered = selectedProps.length ? allViewings.filter(v=>selectedProps.includes(v.property_id)) : allViewings;
@@ -699,6 +704,7 @@ function ViewingsView({ propId }) {
     pending: filtered.filter(v=>v.status==='pending').length,
     completed: filtered.filter(v=>v.status==='completed').length,
   };
+  const displayed = statusFilter ? filtered.filter(v=>v.status===statusFilter) : filtered;
 
   return (
     <div>
@@ -721,13 +727,20 @@ function ViewingsView({ propId }) {
       {success && <InfoBox type="green">{success}</InfoBox>}
 
       <div className="stat-grid">
-        <div className="stat"><div className="stat-val">{stats.total}</div><div className="stat-lbl">Total viewings</div></div>
-        <div className="stat"><div className="stat-val">{stats.confirmed}</div><div className="stat-lbl">Confirmed</div></div>
-        <div className="stat"><div className="stat-val">{stats.pending}</div><div className="stat-lbl">Pending confirm</div></div>
-        <div className="stat"><div className="stat-val">{stats.completed}</div><div className="stat-lbl">Completed</div></div>
+        {[['all','Total viewings',stats.total,null],['confirmed','Confirmed',stats.confirmed,'var(--green)'],['pending','Pending confirm',stats.pending,'var(--amber)'],['completed','Completed',stats.completed,'var(--purple)']].map(([key,label,val,col])=>{
+          const active = (key==='all'&&!statusFilter) || statusFilter===key;
+          return (
+            <div key={key} className="stat" onClick={()=>setStatusFilter(key==='all'?null:key)}
+              style={{cursor:'pointer',borderBottom:col?`3px solid ${col}`:'3px solid transparent',outline:active?'2px solid var(--purple)':'none',transition:'all .12s'}}
+              title="Click to filter the viewings below">
+              <div className="stat-val">{val}</div><div className="stat-lbl">{label}</div>
+            </div>
+          );
+        })}
       </div>
+      {statusFilter && <div className="no-print" style={{margin:'-4px 0 12px',fontSize:12,color:'var(--mid)'}}>Showing <b>{statusFilter}</b> only — <button className="btn btn-sm" style={{padding:'1px 8px'}} onClick={()=>setStatusFilter(null)}>show all</button></div>}
 
-      <ViewingsCalendar viewings={filtered} />
+      <ViewingsCalendar viewings={displayed} />
 
       {showBook && single && (
         <div className="card" style={{marginBottom:16}}>
@@ -767,14 +780,14 @@ function ViewingsView({ propId }) {
       )}
 
       {single ? (
-        loading ? <Spinner /> : viewings.length === 0 ? (
-          <div className="empty"><div className="empty-icon">📅</div><div>No viewings for this property yet</div></div>
+        loading ? <Spinner /> : (statusFilter?viewings.filter(v=>v.status===statusFilter):viewings).length === 0 ? (
+          <div className="empty"><div className="empty-icon">📅</div><div>No {statusFilter||''} viewings for this property</div></div>
         ) : (
           <div className="card">
             <table className="table">
               <thead><tr><th>Date & time</th><th>Agency</th>{user?.role==='broker'&&<th>Negotiator</th>}<th>Buyer</th><th>Mode</th><th>Status</th>{['broker','vendor'].includes(user?.role)&&<th>Action</th>}</tr></thead>
               <tbody>
-                {viewings.map(v => (
+                {(statusFilter?viewings.filter(v=>v.status===statusFilter):viewings).map(v => (
                   <tr key={v.id}>
                     <td style={{fontWeight:500}}>{v.requested_date}<br/><span style={{color:'var(--mid)',fontSize:12}}>{v.requested_time}{v.slot_end_time?` – ${v.slot_end_time}`:''}</span></td>
                     <td>{v.agency_name}</td>
@@ -797,21 +810,29 @@ function ViewingsView({ propId }) {
           </div>
         )
       ) : (
-        filtered.length === 0 ? (
-          <div className="empty"><div className="empty-icon">📅</div><div>No viewings{selectedProps.length?' for the selected properties':''} yet</div></div>
+        displayed.length === 0 ? (
+          <div className="empty"><div className="empty-icon">📅</div><div>No {statusFilter||''} viewings{selectedProps.length?' for the selected properties':''}</div></div>
         ) : (
           <div className="card">
-            <div style={{fontSize:12,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>All viewings ({filtered.length})</div>
+            <div style={{fontSize:12,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>{statusFilter?`${statusFilter} viewings`:'All viewings'} ({displayed.length})</div>
             <table className="table">
-              <thead><tr><th>Property</th><th>Date & time</th><th>Agency</th><th>Buyer</th><th>Status</th></tr></thead>
+              <thead><tr><th>Property</th><th>Date & time</th><th>Agency</th><th>Buyer</th><th>Status</th>{['broker','vendor'].includes(user?.role)&&<th>Action</th>}</tr></thead>
               <tbody>
-                {filtered.map(v => (
+                {displayed.map(v => (
                   <tr key={v.id}>
                     <td style={{fontWeight:500,fontFamily:'monospace',fontSize:12}}>{v.property_reference||('#'+v.property_id)}<div style={{fontWeight:400,color:'var(--mid)'}}>{v.city}</div></td>
                     <td>{v.requested_date}<br/><span style={{color:'var(--mid)',fontSize:12}}>{v.requested_time}</span></td>
                     <td style={{fontSize:12}}>{v.agency_name||'—'}</td>
                     <td style={{fontSize:12,color:'var(--mid)'}}>{v.buyer_reference||'—'}</td>
                     <td><Badge status={v.status} /></td>
+                    {['broker','vendor'].includes(user?.role) && (
+                      <td>{v.status==='pending' && (
+                        <div style={{display:'flex',gap:4}}>
+                          <button className="btn btn-sm btn-green" onClick={()=>doConfirmAny(v.property_id,v.id,'confirm')}>Confirm</button>
+                          <button className="btn btn-sm btn-danger" onClick={()=>doConfirmAny(v.property_id,v.id,'decline')}>Decline</button>
+                        </div>
+                      )}</td>
+                    )}
                   </tr>
                 ))}
               </tbody>
