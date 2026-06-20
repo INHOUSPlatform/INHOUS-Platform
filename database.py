@@ -312,6 +312,7 @@ def init_db():
         message TEXT,
         is_read INTEGER DEFAULT 0,
         action_url TEXT,
+        level TEXT DEFAULT 'info',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
 
@@ -377,6 +378,7 @@ def init_db():
         'properties': [("state_region", "TEXT"), ("currency", "TEXT DEFAULT 'GBP'")],
         'offers': [("inhous_fee", "TEXT"), ("offer_date", "TEXT")],
         'viewing_feedback': [("audio_path", "TEXT"), ("audio_filename", "TEXT")],
+        'notifications': [("level", "TEXT DEFAULT 'info'")],
     }
     for table, cols in migrations.items():
         for col, ddl in cols:

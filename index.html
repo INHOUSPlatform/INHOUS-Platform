@@ -1539,19 +1539,39 @@ function PhotographyView({ propId }) {
 }
 
 function NotificationsView() {
-  const { authApi } = useAuth();
+  const { authApi, user } = useAuth();
   const [notifs, setNotifs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [scanning, setScanning] = React.useState(false);
+  const [scanMsg, setScanMsg] = React.useState(null);
 
-  React.useEffect(() => {
-    authApi('GET', '/notifications').then(n=>{setNotifs(n||[]); authApi('POST','/notifications/mark-read');}).finally(()=>setLoading(false));
-  }, []);
+  const load = () => authApi('GET', '/notifications').then(n=>{setNotifs(n||[]); authApi('POST','/notifications/mark-read');}).finally(()=>setLoading(false));
+  React.useEffect(() => { load(); }, []);
 
-  const typeColor = { offer_received:'badge-purple', viewing_booked:'badge-green', viewing_confirmed:'badge-green', viewing_request:'badge-blue', feedback_received:'badge-amber', offer_accepted:'badge-green', action_required:'badge-red', aml_certified:'badge-green' };
+  const runReminders = async () => {
+    setScanning(true); setScanMsg(null);
+    try { const r = await authApi('POST','/notifications/run-reminders'); setScanMsg(`${r.created} new action alert(s) created.`); await load(); }
+    catch(err){ setScanMsg('Error: '+err.message); } finally { setScanning(false); }
+  };
+
+  // Derive a colour level: prefer backend n.level, else map from type
+  const typeLevel = { offer_accepted:'green', viewing_confirmed:'green', aml_certified:'green', feedback_received:'green',
+                      action_required:'amber', feedback_required:'amber', viewing_request:'amber',
+                      offer_declined:'red', viewing_declined:'red' };
+  const levelColour = { green:'var(--green)', amber:'var(--amber)', red:'var(--red)', info:'var(--purple)' };
+  const levelBadge = { green:'badge-green', amber:'badge-amber', red:'badge-red', info:'badge-purple' };
+  const levelOf = (n) => n.level && n.level!=='info' ? n.level : (typeLevel[n.type] || 'info');
 
   return (
     <div>
-      <PageHeader title="Notifications" subtitle={`${notifs.length} notifications`} />
+      <PageHeader title="Notifications" subtitle={`${notifs.length} notifications`}
+        actions={user?.role==='broker' && <button className="btn btn-primary btn-sm" onClick={runReminders} disabled={scanning}>{scanning?'Scanning…':'Check for outstanding actions'}</button>} />
+      {scanMsg && <InfoBox type="green">{scanMsg}</InfoBox>}
+      <div className="no-print" style={{display:'flex',gap:12,fontSize:11,color:'var(--mid)',marginBottom:12}}>
+        <span><span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:'var(--green)',marginRight:4}}></span>Done / positive</span>
+        <span><span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:'var(--amber)',marginRight:4}}></span>Action needed</span>
+        <span><span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:'var(--red)',marginRight:4}}></span>Urgent / declined</span>
+      </div>
       {loading ? <Spinner /> : notifs.length === 0 ? (
         <div className="empty"><div className="empty-icon">🔔</div><div>No notifications</div></div>
       ) : (() => {
@@ -1566,19 +1586,22 @@ function NotificationsView() {
               <span style={{fontSize:13,fontWeight:600,fontFamily:"'Cormorant Garamond', serif",color:'var(--dark)'}}>{propName==='General'?'General':`🏠 ${propName}`}</span>
               <span className="badge badge-gray">{list.length}</span>
             </div>
-            <div className="card">
-              {list.map((n,i) => (
-                <div key={n.id} style={{padding:'12px 0',borderBottom:i<list.length-1?'1px solid var(--border)':'none',opacity:n.is_read?0.7:1}}>
-                  <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
-                    <span className={`badge ${typeColor[n.type]||'badge-gray'}`} style={{marginTop:1,flexShrink:0}}>{n.type?.replace(/_/g,' ')}</span>
-                    <div style={{flex:1}}>
-                      <div style={{fontWeight:500,fontSize:13}}>{n.title}</div>
-                      {n.message && <div style={{fontSize:12,color:'var(--mid)',marginTop:2}}>{n.message}</div>}
-                      <div style={{fontSize:11,color:'var(--mid)',marginTop:4}}>{n.created_at?.split('T')[0]}</div>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {list.map((n) => {
+                const lvl = levelOf(n);
+                return (
+                  <div key={n.id} className="card" style={{padding:'12px 14px',borderLeft:`4px solid ${levelColour[lvl]}`,opacity:n.is_read?0.75:1}}>
+                    <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                      <span className={`badge ${levelBadge[lvl]}`} style={{marginTop:1,flexShrink:0}}>{lvl==='amber'?'Action':lvl==='red'?'Urgent':lvl==='green'?'Update':(n.type||'').replace(/_/g,' ')}</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:500,fontSize:13}}>{n.title}</div>
+                        {n.message && <div style={{fontSize:12,color:'var(--mid)',marginTop:2}}>{n.message}</div>}
+                        <div style={{fontSize:11,color:'var(--mid)',marginTop:4}}>{n.created_at?.split('T')[0]}</div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ));

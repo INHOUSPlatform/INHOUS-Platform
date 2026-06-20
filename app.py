@@ -83,10 +83,11 @@ def can_view_document(role, doc):
         return False
     return doc['doc_type'] in allowed
 
-def notify(db, user_id, property_id, type_, title, message='', action_url=''):
+def notify(db, user_id, property_id, type_, title, message='', action_url='', level='info'):
+    # level: 'green' (positive/done), 'amber' (needs action), 'red' (urgent/declined), 'info' (neutral)
     db.execute(
-        'INSERT INTO notifications (user_id,property_id,type,title,message,action_url) VALUES (?,?,?,?,?,?)',
-        (user_id, property_id, type_, title, message, action_url)
+        'INSERT INTO notifications (user_id,property_id,type,title,message,action_url,level) VALUES (?,?,?,?,?,?,?)',
+        (user_id, property_id, type_, title, message, action_url, level)
     )
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -649,8 +650,8 @@ def book_viewing(property_id):
         vendor = db.execute("SELECT user_id FROM property_access WHERE property_id=? AND role='vendor'", (property_id,)).fetchone()
         if vendor:
             notify(db, vendor['user_id'], property_id, 'viewing_request',
-                   f"Viewing request from {agency_name}",
-                   f"{requested_date} at {requested_time} · Please confirm or decline")
+                   f"Action: confirm viewing request from {agency_name}",
+                   f"{requested_date} at {requested_time} · Please confirm or decline", level='amber')
 
     audit(db, property_id, g.user_id, 'viewing_booked', 'viewing', viewing_id, f'{mode}:{requested_date}:{requested_time}')
     db.commit()
@@ -675,12 +676,12 @@ def confirm_viewing(property_id, viewing_id):
                    ('confirmed', g.user_id, viewing_id))
         # Notify the agent who booked
         notify(db, viewing['requested_by'], property_id, 'viewing_confirmed',
-               'Viewing confirmed', f"{viewing['requested_date']} at {viewing['requested_time']}")
+               'Viewing confirmed', f"{viewing['requested_date']} at {viewing['requested_time']}", level='green')
     else:
         db.execute('UPDATE viewing_requests SET status=?, declined_reason=? WHERE id=?',
                    ('declined', data.get('reason',''), viewing_id))
         notify(db, viewing['requested_by'], property_id, 'viewing_declined',
-               'Viewing request declined', data.get('reason',''))
+               'Viewing request declined', data.get('reason',''), level='red')
     audit(db, property_id, g.user_id, f'viewing_{action}', 'viewing', viewing_id)
     db.commit()
     db.close()
@@ -929,10 +930,11 @@ def offer_action(property_id, offer_id):
     set_clause = ', '.join(f'{k}=?' for k in updates)
     db.execute(f'UPDATE offers SET {set_clause}, updated_at=CURRENT_TIMESTAMP WHERE id=?',
                list(updates.values()) + [offer_id])
-    # Notify the agent who submitted
+    # Notify the agent who submitted (green=accepted, red=declined, amber=countered)
     notify(db, offer['submitted_by'], property_id, f'offer_{action}d',
            f"Offer {status_map[action]} — {fmt_money(offer['amount'], currency)}",
-           data.get('counter_notes') or data.get('reason',''))
+           data.get('counter_notes') or data.get('reason',''),
+           level={'accept':'green','decline':'red','counter':'amber'}[action])
     audit(db, property_id, g.user_id, f'offer_{action}d', 'offer', offer_id)
     db.commit()
     db.close()
@@ -944,29 +946,30 @@ def _trigger_acceptance_workflow(db, property_id, offer_id, offer, currency='GBP
     # 1. Buyer solicitor invited (notification to broker to send invite)
     notify(db, prop['broker_id'], property_id, 'action_required',
            'Send invite — buyer solicitor',
-           f"Invite {offer['buyer_solicitor_name']} at {offer['buyer_solicitor_firm']} to upload buyer AML")
+           f"Invite {offer['buyer_solicitor_name'] or 'the buyer solicitor'} at {offer['buyer_solicitor_firm'] or 'their firm'} to upload buyer AML",
+           level='amber')
     # 2. Vendor solicitor notified
     vendor_sol = db.execute("SELECT user_id FROM property_access WHERE property_id=? AND role='vendor_solicitor'", (property_id,)).fetchone()
     if vendor_sol:
         notify(db, vendor_sol['user_id'], property_id, 'offer_accepted',
                'Offer accepted — begin conveyancing preparation',
-               f"Accepted offer: {accepted}. Please begin conveyancing prep for {prop['address_line1']}.")
+               f"Accepted offer: {accepted}. Please begin conveyancing prep for {prop['address_line1']}.", level='green')
     # 3. Vendor notified
     vendor = db.execute("SELECT user_id FROM property_access WHERE property_id=? AND role='vendor'", (property_id,)).fetchone()
     if vendor:
         notify(db, vendor['user_id'], property_id, 'offer_accepted',
                f"Offer accepted — {accepted}",
-               "Your solicitor has been notified to begin conveyancing preparation.")
-    # 4. Broker action items
+               "Your solicitor has been notified to begin conveyancing preparation.", level='green')
+    # 4. Broker action items (amber = needs action)
     notify(db, prop['broker_id'], property_id, 'action_required',
            'Contact bank/lender — proof of funds',
-           "Request proof of funds from " + (offer['financial_provider'] or "buyer's bank"))
+           "Request proof of funds from " + (offer['financial_provider'] or "buyer's bank"), level='amber')
     notify(db, prop['broker_id'], property_id, 'action_required',
            'Send removal company referrals',
-           'Trigger removal company quote requests to vendor and buyer')
+           'Trigger removal company quote requests to vendor and buyer', level='amber')
     notify(db, prop['broker_id'], property_id, 'action_required',
            'Send RICS surveyor referrals to buyer',
-           'Send list of recommended surveyors for the buyer to consider')
+           'Send list of recommended surveyors for the buyer to consider', level='amber')
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AML / KYC
@@ -1214,6 +1217,94 @@ def mark_notifications_read():
     db.commit()
     db.close()
     return jsonify({'message': 'Notifications marked as read'})
+
+@app.route('/api/notifications/run-reminders', methods=['POST'])
+@require_role('broker')
+def run_reminders():
+    """Scan the whole pipeline for outstanding actions and alert the responsible
+    party (idempotent — uses action_url as a per-item key so re-running won't dupe)."""
+    db = get_db()
+    today = datetime.date.today().isoformat()
+    created = 0
+    def push(user_id, property_id, type_, title, message, key, level='amber'):
+        nonlocal created
+        if not user_id:
+            return
+        if db.execute('SELECT 1 FROM notifications WHERE user_id=? AND action_url=?', (user_id, key)).fetchone():
+            return
+        notify(db, user_id, property_id, type_, title, message, key, level)
+        created += 1
+
+    def role_user(pid, role):
+        r = db.execute('SELECT user_id FROM property_access WHERE property_id=? AND role=? LIMIT 1', (pid, role)).fetchone()
+        return r['user_id'] if r else None
+
+    # 1) AGENT — viewing in the past with no feedback -> provide feedback
+    for r in db.execute('''SELECT vr.id, vr.requested_by, vr.requested_date, vr.property_id, p.address_line1
+        FROM viewing_requests vr JOIN properties p ON vr.property_id=p.id
+        WHERE vr.requested_date < ? AND vr.status NOT IN ('declined','cancelled_agent','cancelled_vendor','pending')
+        AND NOT EXISTS (SELECT 1 FROM viewing_feedback vf WHERE vf.viewing_id=vr.id)''', (today,)).fetchall():
+        push(r['requested_by'], r['property_id'], 'feedback_required',
+             'Action needed: provide viewing feedback',
+             f"Your viewing at {r['address_line1']} on {r['requested_date']} has no feedback yet. Please submit it.",
+             f"action:feedback:{r['id']}")
+
+    # 2) VENDOR — viewing request still pending confirmation
+    for r in db.execute('''SELECT vr.id, vr.requested_date, vr.agency_name, vr.property_id
+        FROM viewing_requests vr WHERE vr.status='pending' ''').fetchall():
+        push(role_user(r['property_id'],'vendor'), r['property_id'], 'viewing_request',
+             'Action needed: confirm a viewing request',
+             f"{r['agency_name']} requested {r['requested_date']} — confirm or decline.",
+             f"action:confirmview:{r['id']}")
+
+    # 3) BROKER + VENDOR — offer awaiting a decision
+    for r in db.execute('''SELECT o.id, o.amount, o.agency_name, o.property_id, p.broker_id, p.currency
+        FROM offers o JOIN properties p ON o.property_id=p.id WHERE o.status='submitted' ''').fetchall():
+        msg = f"Offer of {fmt_money(r['amount'], r['currency'])} from {r['agency_name']} awaits a decision."
+        push(r['broker_id'], r['property_id'], 'action_required', 'Action needed: respond to an offer', msg, f"action:offer:{r['id']}:broker")
+        push(role_user(r['property_id'],'vendor'), r['property_id'], 'action_required', 'Action needed: respond to an offer', msg, f"action:offer:{r['id']}:vendor")
+
+    # 4) SOLICITORS — AML record still pending certification (alert the relevant solicitor + broker)
+    for r in db.execute('''SELECT ar.id, ar.party_type, ar.person_name, ar.property_id, p.broker_id
+        FROM aml_records ar JOIN properties p ON ar.property_id=p.id WHERE ar.status='pending' ''').fetchall():
+        sol_role = 'vendor_solicitor' if r['party_type']=='vendor' else 'buyer_solicitor'
+        target = role_user(r['property_id'], sol_role) or r['broker_id']
+        push(target, r['property_id'], 'action_required',
+             f"Action needed: certify {r['party_type']} AML/KYC",
+             f"AML/KYC for {r['person_name']} is pending certification.",
+             f"action:aml:{r['id']}")
+
+    # 5) BROKER — property under offer but no memorandum of sale issued
+    for r in db.execute('''SELECT p.id, p.broker_id FROM properties p WHERE p.status='under_offer'
+        AND NOT EXISTS (SELECT 1 FROM documents d WHERE d.property_id=p.id AND d.doc_type='memo_of_sale')''').fetchall():
+        push(r['broker_id'], r['id'], 'action_required',
+             'Action needed: issue the memorandum of sale',
+             'This sale is agreed but no memorandum of sale has been uploaded yet.',
+             f"action:memo:{r['id']}")
+
+    # 6) VENDOR — photography shoot not yet booked
+    for r in db.execute('''SELECT pb.id, pb.property_id FROM photography_bookings pb
+        JOIN properties p ON pb.property_id=p.id
+        WHERE pb.booking_type='photography' AND (pb.preferred_date IS NULL OR pb.preferred_date='')
+        AND p.status IN ('onboarding','photography_pending','active')''').fetchall():
+        push(role_user(r['property_id'],'vendor'), r['property_id'], 'action_required',
+             'Action needed: book the photography shoot',
+             'Please choose a preferred date for the photography & floorplan shoot.',
+             f"action:photo:{r['id']}")
+
+    # 7) BROKER — buyer requested an introduction (third party) to follow up on
+    for r in db.execute('''SELECT re.id, re.property_id, rp.company_name, p.broker_id
+        FROM referral_events re JOIN referral_partners rp ON re.partner_id=rp.id
+        JOIN properties p ON re.property_id=p.id
+        WHERE re.event_type='clicked' ''').fetchall():
+        push(r['broker_id'], r['property_id'], 'action_required',
+             'Action needed: follow up a third-party introduction',
+             f"A client requested an introduction to {r['company_name']} — please connect them.",
+             f"action:referral:{r['id']}")
+
+    db.commit()
+    db.close()
+    return jsonify({'message': f'{created} action alert(s) created', 'created': created})
 
 # ══════════════════════════════════════════════════════════════════════════════
 # USERS (admin)
