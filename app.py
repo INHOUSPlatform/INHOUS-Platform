@@ -1056,6 +1056,46 @@ def certify_aml(property_id, aml_id):
 # DOCUMENTS
 # ══════════════════════════════════════════════════════════════════════════════
 
+@app.route('/api/documents', methods=['GET'])
+@require_auth
+def all_documents():
+    """All documents across the user's accessible properties (for the synopsis),
+    applying the same per-role document visibility as the per-property view."""
+    db = get_db()
+    sel = '''d.id, d.property_id, d.doc_type, d.original_filename, d.filename, d.status,
+             d.created_at, d.uploaded_by, u.full_name as uploaded_by_name,
+             p.reference as property_reference, p.city'''
+    if g.role == 'broker':
+        rows = db.execute(f'''SELECT {sel} FROM documents d LEFT JOIN users u ON d.uploaded_by=u.id
+            JOIN properties p ON d.property_id=p.id ORDER BY d.created_at DESC''').fetchall()
+    else:
+        rows = db.execute(f'''SELECT {sel} FROM documents d LEFT JOIN users u ON d.uploaded_by=u.id
+            JOIN properties p ON d.property_id=p.id
+            WHERE d.property_id IN (SELECT property_id FROM property_access WHERE user_id=?)
+            ORDER BY d.created_at DESC''', (g.user_id,)).fetchall()
+    db.close()
+    docs = [d for d in rows_to_list(rows) if can_view_document(g.role, d)]
+    return jsonify(docs)
+
+@app.route('/api/properties/<int:property_id>/documents/<int:doc_id>/status', methods=['POST'])
+@require_role('broker')
+def set_document_status(property_id, doc_id):
+    data = request.get_json() or {}
+    status = data.get('status')
+    if status not in ('pending', 'approved', 'rejected', 'archived'):
+        return jsonify({'error': 'Invalid status'}), 400
+    db = get_db()
+    doc = db.execute('SELECT id FROM documents WHERE id=? AND property_id=?', (doc_id, property_id)).fetchone()
+    if not doc:
+        db.close()
+        return jsonify({'error': 'Document not found'}), 404
+    db.execute('UPDATE documents SET status=?, approved_by=?, approved_at=CURRENT_TIMESTAMP WHERE id=?',
+               (status, g.user_id, doc_id))
+    audit(db, property_id, g.user_id, f'document_{status}', 'document', doc_id)
+    db.commit()
+    db.close()
+    return jsonify({'message': f'Document {status}'})
+
 @app.route('/api/properties/<int:property_id>/documents', methods=['GET'])
 @require_auth
 @require_property_access

@@ -1366,6 +1366,10 @@ function DocumentsView({ propId }) {
   const [shareForm, setShareForm] = React.useState({ party_type:'solicitor', recipient_name:'', recipient_email:'', expires_days:30 });
   const [shareResult, setShareResult] = React.useState(null);
   const [shareBusy, setShareBusy] = React.useState(false);
+  const [allDocs, setAllDocs] = React.useState([]);
+  const [docStatusFilter, setDocStatusFilter] = React.useState('action'); // action = pending+rejected
+
+  const loadAllDocs = () => authApi('GET','/documents').then(d=>setAllDocs(d||[])).catch(()=>{});
 
   React.useEffect(() => {
     authApi('GET', '/properties').then(ps => {
@@ -1373,12 +1377,25 @@ function DocumentsView({ propId }) {
       const pid = propId || (ps[0]&&ps[0].id);
       if(pid) loadDocs(pid);
     });
+    loadAllDocs();
   }, [propId]);
 
   const loadDocs = async (pid) => {
     setSelectedProp(pid); setLoading(true);
     const d = await authApi('GET', `/properties/${pid}/documents`).catch(()=>[]);
     setDocs(d||[]); setLoading(false);
+  };
+
+  const downloadAny = async (d) => {
+    const tok = localStorage.getItem('inhous_token');
+    const res = await fetch(`${API}/properties/${d.property_id}/documents/${d.id}/download`, { headers: tok?{Authorization:`Bearer ${tok}`}:{} });
+    if(!res.ok) return;
+    const blob = await res.blob(); const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download=d.original_filename||d.filename||'document'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  };
+  const setDocStatus = async (d, status) => {
+    await authApi('POST', `/properties/${d.property_id}/documents/${d.id}/status`, {status}).catch(()=>{});
+    loadAllDocs(); if(selectedProp) loadDocs(selectedProp);
   };
 
   const uploadFiles = async (fileList) => {
@@ -1429,6 +1446,45 @@ function DocumentsView({ propId }) {
   return (
     <div>
       <PageHeader title="Documents" subtitle="Property document vault" />
+      {(() => {
+        const counts = { pending:0, rejected:0, approved:0 };
+        allDocs.forEach(d=>{ if(counts[d.status]!=null) counts[d.status]++; });
+        const sel = docStatusFilter;
+        const list = allDocs.filter(d => sel==='action' ? (d.status==='pending'||d.status==='rejected') : d.status===sel);
+        return (
+          <div className="card" style={{marginBottom:16}}>
+            <div style={{fontSize:12,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:10}}>Documents needing action — across all your properties</div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+              {[['action','Needs action',counts.pending+counts.rejected,'var(--amber)'],['pending','Pending review',counts.pending,'var(--amber)'],['rejected','Rejected',counts.rejected,'var(--red)'],['approved','Approved',counts.approved,'var(--green)']].map(([k,l,n,col])=>(
+                <button key={k} className="btn btn-sm" onClick={()=>setDocStatusFilter(k)} style={{background:sel===k?'var(--purple)':'var(--light)',color:sel===k?'#fff':'var(--mid)',borderColor:sel===k?'var(--purple)':'var(--border)'}}>
+                  <span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:col,marginRight:5}}></span>{l} ({n})
+                </button>
+              ))}
+            </div>
+            {list.length===0 ? <div style={{fontSize:12,color:'var(--mid)'}}>Nothing here — all clear.</div> : (
+              <table className="table">
+                <thead><tr><th>Property</th><th>Document</th><th>Type</th><th>Uploaded by</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody>
+                  {list.map(d=>(
+                    <tr key={d.id}>
+                      <td style={{fontSize:12}}><span style={{fontFamily:'monospace'}}>{d.property_reference||('#'+d.property_id)}</span><div style={{color:'var(--mid)'}}>{d.city}</div></td>
+                      <td style={{fontWeight:500}}>{d.original_filename||d.filename}</td>
+                      <td><span className="badge badge-gray">{docTypeLabel[d.doc_type]||d.doc_type}</span></td>
+                      <td style={{fontSize:12,color:'var(--mid)'}}>{d.uploaded_by_name||'—'}</td>
+                      <td><span className={`badge ${d.status==='approved'?'badge-green':d.status==='rejected'?'badge-red':'badge-amber'}`}>{d.status}</span></td>
+                      <td style={{whiteSpace:'nowrap'}}>
+                        <button className="btn btn-sm" onClick={()=>downloadAny(d)}>Download</button>
+                        {user?.role==='broker' && d.status!=='approved' && <button className="btn btn-sm btn-green" style={{marginLeft:4}} onClick={()=>setDocStatus(d,'approved')}>Approve</button>}
+                        {user?.role==='broker' && d.status!=='rejected' && <button className="btn btn-sm btn-danger" style={{marginLeft:4}} onClick={()=>setDocStatus(d,'rejected')}>Reject</button>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        );
+      })()}
       {properties.length > 1 && !propId && (
         <div className="field" style={{marginBottom:16}}><label>Property</label>
           <select value={selectedProp||''} onChange={e=>loadDocs(Number(e.target.value))}>
