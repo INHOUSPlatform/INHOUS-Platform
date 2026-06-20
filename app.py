@@ -67,6 +67,8 @@ ROLE_VISIBLE_DOCS = {
     'buyer': ('memo_of_sale','epc','brochure'),
     'family_office': ('brochure','epc'),
     'photographer': ('photo','floorplan','epc'),
+    'surveyor': ('floorplan','epc','title_register','planning','survey'),
+    'mortgage_broker': ('epc','memo_of_sale','proof_of_funds'),
 }
 
 def can_view_document(role, doc):
@@ -184,11 +186,12 @@ def get_properties():
     db = get_db()
     if g.role == 'broker':
         props = db.execute(
-            'SELECT p.*, u.full_name as broker_name FROM properties p LEFT JOIN users u ON p.broker_id=u.id ORDER BY p.created_at DESC'
+            "SELECT p.*, u.full_name as broker_name, 'broker' as my_role FROM properties p LEFT JOIN users u ON p.broker_id=u.id ORDER BY p.created_at DESC"
         ).fetchall()
     else:
+        # Non-brokers only ever see properties they are a party to (their role on each)
         props = db.execute('''
-            SELECT p.*, u.full_name as broker_name 
+            SELECT p.*, u.full_name as broker_name, pa.role as my_role
             FROM properties p
             LEFT JOIN users u ON p.broker_id=u.id
             JOIN property_access pa ON pa.property_id=p.id AND pa.user_id=?
@@ -226,6 +229,7 @@ def create_property():
         data.get('notes')
     ))
     prop_id = c.lastrowid
+    db.execute("UPDATE properties SET reference=? WHERE id=?", (f"INH-{prop_id:05d}", prop_id))
     # Log launch price
     if guide_price:
         db.execute('INSERT INTO price_log (property_id,price,event_type,logged_by) VALUES (?,?,?,?)',
@@ -310,7 +314,7 @@ def send_invite(property_id):
     data = request.get_json()
     email = (data.get('email') or '').strip().lower()
     role = data.get('role')
-    valid_roles = ['vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer']
+    valid_roles = ['vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer','surveyor','mortgage_broker']
     if not email or role not in valid_roles:
         return jsonify({'error': 'Email and valid role required'}), 400
     db = get_db()

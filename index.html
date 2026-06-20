@@ -203,72 +203,78 @@ function InfoBox({ type = 'purple', label, children }) {
 
 function LoginView() {
   const { login } = useAuth();
+  const [step, setStep] = React.useState('email'); // email -> password
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [error, setError] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const [seeded, setSeeded] = React.useState(false);
 
-  const handleSubmit = async (e) => {
+  const continueEmail = (e) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      await login(email, password);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    if (!email.trim()) return;
+    setError(''); setStep('password');
   };
-
+  const handleSubmit = async (e) => {
+    e.preventDefault(); setError(''); setLoading(true);
+    try { await login(email.trim(), password); }
+    catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
   const seedData = async () => {
-    try {
-      const res = await api('POST', '/seed');
-      setSeeded(true);
-      setEmail('david@inhous.com');
-      setPassword('inhous2026');
-      console.log('Seeded:', res);
-    } catch (e) {
-      setSeeded(true); // already seeded
-      setEmail('david@inhous.com');
-      setPassword('inhous2026');
-    }
+    try { await api('POST', '/seed'); } catch (e) {}
+    setSeeded(true); setEmail('david@inhous.com'); setPassword('inhous2026'); setStep('password');
   };
 
   return (
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--cream)'}}>
-      <div style={{width:'100%',maxWidth:380}}>
-        <div style={{textAlign:'center',marginBottom:32}}>
-          <div style={{fontSize:32,fontFamily:"'Cormorant Garamond', serif",fontWeight:600,color:'var(--gold)',letterSpacing:'0.1em',marginBottom:6}}>INHOUS</div>
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--cream)',padding:20}}>
+      <div style={{width:'100%',maxWidth:400}}>
+        <div style={{textAlign:'center',marginBottom:28}}>
+          <div style={{fontSize:34,fontFamily:"'Cormorant Garamond', serif",fontWeight:600,color:'var(--gold)',letterSpacing:'0.1em',marginBottom:6}}>INHOUS</div>
           <div style={{fontSize:13,color:'var(--mid)'}}>Property Transaction Platform</div>
         </div>
         <div className="card">
-          <form onSubmit={handleSubmit}>
-            <div className="field">
-              <label>Email address</label>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="your@email.com" required />
-            </div>
-            <div className="field">
-              <label>Password</label>
-              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" required />
-            </div>
-            {error && <div className="error-text" style={{marginBottom:10}}>{error}</div>}
-            <button type="submit" className="btn btn-primary" style={{width:'100%'}} disabled={loading}>
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
+          <h3 style={{fontSize:18,marginBottom:4}}>{step==='email'?'Sign in':'Welcome back'}</h3>
+          <div style={{fontSize:12,color:'var(--mid)',marginBottom:16}}>{step==='email'?'Enter your email to continue.':'Enter your password to access your transactions.'}</div>
+          {step==='email' ? (
+            <form onSubmit={continueEmail}>
+              <div className="field">
+                <label>Email address</label>
+                <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="your@email.com" autoFocus required />
+              </div>
+              <button type="submit" className="btn btn-primary" style={{width:'100%'}}>Continue</button>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit}>
+              <div onClick={()=>{setStep('email'); setPassword(''); setError('');}} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 12px',border:'1px solid var(--border)',borderRadius:'var(--radius-sm)',marginBottom:14,cursor:'pointer',background:'var(--light)'}}>
+                <span style={{fontSize:13}}>{email}</span>
+                <span style={{fontSize:11,color:'var(--purple)'}}>Change</span>
+              </div>
+              <div className="field">
+                <label>Password</label>
+                <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" autoFocus required />
+              </div>
+              {error && <div className="error-text" style={{marginBottom:10}}>{error}</div>}
+              <button type="submit" className="btn btn-primary" style={{width:'100%'}} disabled={loading}>
+                {loading ? 'Signing in…' : 'Sign in'}
+              </button>
+            </form>
+          )}
           <div style={{marginTop:16,paddingTop:16,borderTop:'1px solid var(--border)',textAlign:'center'}}>
             {!seeded ? (
-              <button className="btn btn-sm" onClick={seedData} style={{color:'var(--mid)',fontSize:12}}>
-                Load demo data (first time setup)
-              </button>
+              <button className="btn btn-sm" onClick={seedData} style={{color:'var(--mid)',fontSize:12}}>Load demo data (first-time setup)</button>
             ) : (
-              <div className="success-text">Demo data loaded — credentials pre-filled above ↑</div>
+              <div className="success-text" style={{fontSize:12}}>Demo data loaded — credentials pre-filled ↑</div>
             )}
           </div>
         </div>
-        <div style={{textAlign:'center',marginTop:16,fontSize:11,color:'var(--mid)'}}>
+        <div className="card" style={{marginTop:14,background:'var(--light)'}}>
+          <div style={{fontSize:11,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:6}}>How access works</div>
+          <div style={{fontSize:12,color:'var(--mid)',lineHeight:1.6}}>
+            You'll only ever see the properties you're <b>directly involved in</b> — each has a unique reference (e.g. <b>INH-00042</b>). Your <b>role on that property</b> — vendor, buyer, solicitor, agent, photographer, surveyor or mortgage broker — is set when you're invited and controls exactly what you can access.
+          </div>
+        </div>
+        <div style={{textAlign:'center',marginTop:14,fontSize:11,color:'var(--mid)'}}>
           INHOUS Limited · platform.inhous.com · Confidential
         </div>
       </div>
@@ -291,10 +297,10 @@ function DashboardLayout({ children, currentPage, setPage, activeProperty, close
     { id: 'viewings', label: 'Viewings', roles: ['broker','vendor','agent'] },
     { id: 'feedback', label: 'Feedback', roles: ['broker','vendor','agent'] },
     { id: 'offers', label: 'Offers', roles: ['broker','vendor','agent'] },
-    { id: 'documents', label: 'Documents', roles: ['broker','vendor','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer'] },
+    { id: 'documents', label: 'Documents', roles: ['broker','vendor','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer','surveyor','mortgage_broker'] },
     { id: 'aml', label: 'AML / KYC', roles: ['broker','vendor_solicitor','buyer_solicitor','agent'] },
     { id: 'photography', label: 'Photography', roles: ['broker','vendor','photographer'] },
-    { id: 'notifications', label: `Notifications${notifCount > 0 ? ` (${notifCount})` : ''}`, roles: ['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer'] },
+    { id: 'notifications', label: `Notifications${notifCount > 0 ? ` (${notifCount})` : ''}`, roles: ['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer','surveyor','mortgage_broker'] },
     { id: 'admin', label: 'Admin', roles: ['broker'] },
   ];
 
@@ -303,7 +309,8 @@ function DashboardLayout({ children, currentPage, setPage, activeProperty, close
   const roleLabel = {
     broker: 'INHOUS Broker', vendor: 'Vendor', agent: 'Agent',
     vendor_solicitor: 'Vendor Solicitor', buyer_solicitor: 'Buyer Solicitor',
-    buyer: 'Buyer', family_office: 'Family Office', photographer: 'Photographer'
+    buyer: 'Buyer', family_office: 'Family Office', photographer: 'Photographer',
+    surveyor: 'Surveyor', mortgage_broker: 'Mortgage Broker'
   };
 
   return (
@@ -370,11 +377,16 @@ function DashboardView({ openProperty }) {
         <div className="stat"><div className="stat-val">{properties.filter(p=>p.status==='under_offer').length}</div><div className="stat-lbl">Under offer</div></div>
         <div className="stat"><div className="stat-val">{properties.filter(p=>p.status==='sold').length}</div><div className="stat-lbl">Sold</div></div>
       </div>
+      {user?.role !== 'broker' && (
+        <InfoBox type="purple" label="Your transactions">
+          You're seeing only the properties you're involved in. Each has a unique reference number, and your role on it is shown on the right.
+        </InfoBox>
+      )}
       {properties.length === 0 ? (
-        <InfoBox type="amber" label="Getting started">No properties yet. Go to Properties to create your first listing.</InfoBox>
+        <InfoBox type="amber" label="Getting started">{user?.role==='broker'?'No properties yet. Go to Properties to create your first listing.':'You have no properties yet. Your INHOUS broker will invite you to the transactions you are part of.'}</InfoBox>
       ) : (
         <div>
-          <div style={{fontSize:12,fontWeight:500,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:10}}>All properties — click to open</div>
+          <div style={{fontSize:12,fontWeight:500,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:10}}>{user?.role==='broker'?'All properties':'Your properties'} — click to open</div>
           {properties.map(p => (
             <div key={p.id} className="card" style={{marginBottom:10,cursor:'pointer',transition:'border-color .15s'}}
               onClick={()=>openProperty(p)}
@@ -382,7 +394,11 @@ function DashboardView({ openProperty }) {
               onMouseOut={e=>e.currentTarget.style.borderColor='var(--border)'}>
               <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between'}}>
                 <div>
-                  <div style={{fontSize:15,fontWeight:500,fontFamily:"'Cormorant Garamond', serif"}}>{p.address_line1}{p.address_line2?`, ${p.address_line2}`:''}</div>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span className="badge badge-purple" style={{fontFamily:'monospace',letterSpacing:'0.02em'}}>{p.reference||`INH-${String(p.id).padStart(5,'0')}`}</span>
+                    {p.my_role && <span className="badge badge-blue">You: {ROLE_LABELS[p.my_role]||p.my_role}</span>}
+                  </div>
+                  <div style={{fontSize:15,fontWeight:500,fontFamily:"'Cormorant Garamond', serif",marginTop:6}}>{p.address_line1}{p.address_line2?`, ${p.address_line2}`:''}</div>
                   <div style={{fontSize:12,color:'var(--mid)',marginTop:2}}>{p.city}{p.state_region?`, ${p.state_region}`:''} · {p.country}</div>
                 </div>
                 <div style={{display:'flex',gap:6,alignItems:'center'}}>
@@ -1635,7 +1651,7 @@ function AdminView() {
     } catch(err){ setError(err.message); } finally { setSaving(false); }
   };
 
-  const roleOpts = ['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer'];
+  const roleOpts = ['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer','surveyor','mortgage_broker'];
 
   return (
     <div>
@@ -1798,8 +1814,8 @@ function PartiesPanel({ propId }) {
     finally { setSending(false); }
   };
 
-  const roleLabel = { vendor:'Vendor', agent:'Agent', vendor_solicitor:'Vendor solicitor', buyer_solicitor:'Buyer solicitor', family_office:'Family office', buyer:'Buyer' };
-  const roleBadge = { vendor:'badge-amber', agent:'badge-blue', vendor_solicitor:'badge-teal', buyer_solicitor:'badge-teal', family_office:'badge-purple', buyer:'badge-green' };
+  const roleLabel = { vendor:'Vendor', agent:'Agent', vendor_solicitor:'Vendor solicitor', buyer_solicitor:'Buyer solicitor', family_office:'Family office', buyer:'Buyer', photographer:'Photographer', surveyor:'Surveyor', mortgage_broker:'Mortgage broker' };
+  const roleBadge = { vendor:'badge-amber', agent:'badge-blue', vendor_solicitor:'badge-teal', buyer_solicitor:'badge-teal', family_office:'badge-purple', buyer:'badge-green', photographer:'badge-gray', surveyor:'badge-gray', mortgage_broker:'badge-gray' };
 
   return (
     <div>
@@ -1822,6 +1838,8 @@ function PartiesPanel({ propId }) {
                   <option value="buyer">Buyer</option>
                   <option value="family_office">Family office</option>
                   <option value="photographer">Photographer</option>
+                  <option value="surveyor">Surveyor</option>
+                  <option value="mortgage_broker">Mortgage broker</option>
                 </select>
               </div>
               <div className="field"><label>Agency / firm name</label><input value={invForm.agency_name} onChange={e=>setInvForm({...invForm,agency_name:e.target.value})} placeholder="e.g. Knight Frank, M. Singh & Co" /></div>
@@ -1957,7 +1975,7 @@ function IntroductionsView({ propId }) {
   );
 }
 
-const ROLE_LABELS = { broker:'INHOUS broker', vendor:'Vendor', agent:'Agent', vendor_solicitor:'Vendor solicitor', buyer_solicitor:'Buyer solicitor', buyer:'Buyer', family_office:'Family office' };
+const ROLE_LABELS = { broker:'INHOUS broker', vendor:'Vendor', agent:'Agent', vendor_solicitor:'Vendor solicitor', buyer_solicitor:'Buyer solicitor', buyer:'Buyer', family_office:'Family office', photographer:'Photographer', surveyor:'Surveyor', mortgage_broker:'Mortgage broker' };
 const CURRENCY_SYM = { GBP:'£', EUR:'€', USD:'$', CHF:'CHF ', AED:'AED ' };
 
 function ValuationsView({ propId }) {
@@ -2195,12 +2213,12 @@ function PropertyShell({ prop, page, setPage, onBack, children }) {
   const sym = {GBP:'£',EUR:'€',USD:'$',CHF:'CHF ',AED:'AED '}[prop.currency||'GBP'] || '£';
   const tabs = [
     { id:'property', label:'Overview', roles:['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office'] },
-    { id:'participants', label:'Participants', roles:['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer'] },
+    { id:'participants', label:'Participants', roles:['broker','vendor','agent','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer','surveyor','mortgage_broker'] },
     { id:'valuations', label:'Valuations', roles:['broker','vendor','agent'] },
     { id:'viewings', label:'Viewings', roles:['broker','vendor','agent'] },
     { id:'feedback', label:'Feedback', roles:['broker','vendor','agent'] },
     { id:'offers', label:'Offers', roles:['broker','vendor','agent'] },
-    { id:'documents', label:'Documents', roles:['broker','vendor','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer'] },
+    { id:'documents', label:'Documents', roles:['broker','vendor','vendor_solicitor','buyer_solicitor','buyer','family_office','photographer','surveyor','mortgage_broker'] },
     { id:'aml', label:'AML / KYC', roles:['broker','vendor_solicitor','buyer_solicitor','agent'] },
     { id:'photography', label:'Photography', roles:['broker','vendor','photographer'] },
     { id:'brochure', label:'Brochure', roles:['broker','vendor','agent'] },

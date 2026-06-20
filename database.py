@@ -32,6 +32,7 @@ def init_db():
     # ── PROPERTIES ────────────────────────────────────────────────────────────
     c.execute('''CREATE TABLE IF NOT EXISTS properties (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        reference TEXT,
         address_line1 TEXT NOT NULL,
         address_line2 TEXT,
         city TEXT NOT NULL,
@@ -375,7 +376,7 @@ def init_db():
 
     # ── Schema migrations: add new columns to pre-existing tables (idempotent) ──
     migrations = {
-        'properties': [("state_region", "TEXT"), ("currency", "TEXT DEFAULT 'GBP'")],
+        'properties': [("state_region", "TEXT"), ("currency", "TEXT DEFAULT 'GBP'"), ("reference", "TEXT")],
         'offers': [("inhous_fee", "TEXT"), ("offer_date", "TEXT")],
         'viewing_feedback': [("audio_path", "TEXT"), ("audio_filename", "TEXT")],
         'notifications': [("level", "TEXT DEFAULT 'info'")],
@@ -386,6 +387,9 @@ def init_db():
                 c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
             except sqlite3.OperationalError:
                 pass  # column already exists
+
+    # Backfill unique property reference numbers (INH-00001, INH-00002, …)
+    c.execute("UPDATE properties SET reference = printf('INH-%05d', id) WHERE reference IS NULL OR reference = ''")
 
     conn.commit()
     conn.close()
