@@ -1665,7 +1665,7 @@ function AdminView() {
               <div className="field"><label>Password *</label><input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Min 8 characters" required /></div>
               <div className="field"><label>Full name *</label><input value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})} required /></div>
               <div className="field"><label>Role *</label><select value={form.role} onChange={e=>setForm({...form,role:e.target.value})}>{roleOpts.map(r=><option key={r} value={r}>{r.replace(/_/g,' ')}</option>)}</select></div>
-              <div className="field"><label>Agency name</label><input value={form.agency_name} onChange={e=>setForm({...form,agency_name:e.target.value})} /></div>
+              {!['vendor','buyer'].includes(form.role) && <div className="field"><label>Company / firm</label><input value={form.agency_name} onChange={e=>setForm({...form,agency_name:e.target.value})} placeholder="e.g. Knight Frank, Mishcon de Reya" /></div>}
               <div className="field"><label>Phone</label><PhoneInput value={form.phone} onChange={v=>setForm({...form,phone:v})} /></div>
               {error && <div className="error-text" style={{marginBottom:8}}>{error}</div>}
               {success && <div className="success-text" style={{marginBottom:8}}>{success}</div>}
@@ -1685,7 +1685,7 @@ function AdminView() {
               </div>
               <div className="field"><label>Email *</label><input type="email" value={inviteForm.email} onChange={e=>setInviteForm({...inviteForm,email:e.target.value})} required /></div>
               <div className="field"><label>Role *</label><select value={inviteForm.role} onChange={e=>setInviteForm({...inviteForm,role:e.target.value})}>{roleOpts.filter(r=>r!=='broker').map(r=><option key={r} value={r}>{r.replace(/_/g,' ')}</option>)}</select></div>
-              <div className="field"><label>Agency name</label><input value={inviteForm.agency_name} onChange={e=>setInviteForm({...inviteForm,agency_name:e.target.value})} /></div>
+              {!['vendor','buyer'].includes(inviteForm.role) && <div className="field"><label>Company / firm</label><input value={inviteForm.agency_name} onChange={e=>setInviteForm({...inviteForm,agency_name:e.target.value})} placeholder="e.g. Knight Frank, Mishcon de Reya" /></div>}
               {inviteSuccess && <div className="success-text" style={{marginBottom:8,wordBreak:'break-all'}}>{inviteSuccess}</div>}
               <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>{saving?'Sending…':'Send invite'}</button>
             </form>
@@ -1842,7 +1842,7 @@ function PartiesPanel({ propId }) {
                   <option value="mortgage_broker">Mortgage broker</option>
                 </select>
               </div>
-              <div className="field"><label>Agency / firm name</label><input value={invForm.agency_name} onChange={e=>setInvForm({...invForm,agency_name:e.target.value})} placeholder="e.g. Knight Frank, M. Singh & Co" /></div>
+              {!['vendor','buyer'].includes(invForm.role) && <div className="field"><label>Company / firm</label><input value={invForm.agency_name} onChange={e=>setInvForm({...invForm,agency_name:e.target.value})} placeholder="e.g. Knight Frank, M. Singh & Co" /></div>}
               <div className="field"><label style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>Personal message (optional) <Dictate onText={t=>setInvForm(f=>({...f,message:(f.message?f.message+' ':'')+t}))} /></label><input value={invForm.message} onChange={e=>setInvForm({...invForm,message:e.target.value})} placeholder="e.g. Please log in to upload AML documents" /></div>
             </div>
             {inviteResult && <div style={{fontSize:12,marginBottom:8,color:inviteResult.startsWith('✓')?'var(--green)':'var(--red)',wordBreak:'break-all'}}>{inviteResult}</div>}
