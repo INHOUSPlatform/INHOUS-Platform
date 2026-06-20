@@ -530,11 +530,114 @@ function PropertiesView({ openProperty }) {
   );
 }
 
+const CAL_COLOUR = s => s==='confirmed'?'var(--green)':s==='pending'?'var(--amber)':s==='completed'?'var(--purple)':s==='declined'?'var(--red)':'var(--mid)';
+const calPad = n => String(n).padStart(2,'0');
+const calDs = d => `${d.getFullYear()}-${calPad(d.getMonth()+1)}-${calPad(d.getDate())}`;
+function calChipLabel(v){ return `${v.requested_time||''}${v.property_reference?` · ${v.property_reference}`:(v.agency_name?` · ${v.agency_name}`:'')}`; }
+
+function ViewingsCalendar({ viewings }) {
+  const [mode, setMode] = React.useState('month');   // day | week | month
+  const [cursor, setCursor] = React.useState(()=>new Date());
+  const todayStr = calDs(new Date());
+  const byDate = {};
+  (viewings||[]).forEach(v=>{ if(v.requested_date){ (byDate[v.requested_date]=byDate[v.requested_date]||[]).push(v); } });
+  Object.values(byDate).forEach(l=>l.sort((a,b)=>(a.requested_time||'').localeCompare(b.requested_time||'')));
+
+  const startOfWeek = (d)=>{ const x=new Date(d); x.setDate(x.getDate()-((x.getDay()+6)%7)); x.setHours(0,0,0,0); return x; };
+  const shift = (n)=>{ const d=new Date(cursor); if(mode==='month') d.setMonth(d.getMonth()+n); else if(mode==='week') d.setDate(d.getDate()+7*n); else d.setDate(d.getDate()+n); setCursor(d); };
+  let title;
+  if (mode==='month') title = cursor.toLocaleString('en-GB',{month:'long',year:'numeric'});
+  else if (mode==='day') title = cursor.toLocaleString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  else { const ws=startOfWeek(cursor), we=new Date(ws); we.setDate(ws.getDate()+6); title=`${ws.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${we.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`; }
+
+  const chip = (v,j)=>(
+    <div key={j} title={`${v.requested_time} · ${v.agency_name||''} · ${v.buyer_reference||''} · ${v.status}`}
+      style={{fontSize:10,marginBottom:2,padding:'1px 4px',borderRadius:3,background:CAL_COLOUR(v.status),color:'#fff',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+      {calChipLabel(v)}
+    </div>
+  );
+
+  let body;
+  if (mode==='month') {
+    const first=new Date(cursor.getFullYear(),cursor.getMonth(),1);
+    const startDow=(first.getDay()+6)%7, daysIn=new Date(cursor.getFullYear(),cursor.getMonth()+1,0).getDate();
+    const cells=[]; for(let i=0;i<startDow;i++) cells.push(null);
+    for(let d=1;d<=daysIn;d++){ const ds=`${cursor.getFullYear()}-${calPad(cursor.getMonth()+1)}-${calPad(d)}`; cells.push({d,ds,items:byDate[ds]||[]}); }
+    body=(
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>
+        {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=><div key={d} style={{textAlign:'center',fontSize:11,color:'var(--mid)',fontWeight:600,paddingBottom:4}}>{d}</div>)}
+        {cells.map((c,i)=> c===null ? <div key={'e'+i}></div> : (
+          <div key={c.ds} style={{minHeight:80,border:'1px solid var(--border)',borderRadius:6,padding:4,background:c.ds===todayStr?'var(--purple-light)':'var(--white)'}}>
+            <div style={{fontSize:11,color:'var(--mid)',fontWeight:c.ds===todayStr?700:400,marginBottom:2}}>{c.d}</div>
+            {c.items.slice(0,3).map(chip)}
+            {c.items.length>3 && <div style={{fontSize:9,color:'var(--mid)'}}>+{c.items.length-3} more</div>}
+          </div>
+        ))}
+      </div>
+    );
+  } else if (mode==='week') {
+    const ws=startOfWeek(cursor);
+    const days=[...Array(7)].map((_,i)=>{ const d=new Date(ws); d.setDate(ws.getDate()+i); const ds=calDs(d); return {d,ds,items:byDate[ds]||[]}; });
+    body=(
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>
+        {days.map(c=>(
+          <div key={c.ds} style={{minHeight:160,border:'1px solid var(--border)',borderRadius:6,padding:4,background:c.ds===todayStr?'var(--purple-light)':'var(--white)'}}>
+            <div style={{fontSize:11,color:'var(--mid)',fontWeight:c.ds===todayStr?700:500,marginBottom:4}}>{c.d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric'})}</div>
+            {c.items.map(chip)}
+            {c.items.length===0 && <div style={{fontSize:10,color:'var(--border)'}}>—</div>}
+          </div>
+        ))}
+      </div>
+    );
+  } else {
+    const items = byDate[calDs(cursor)]||[];
+    body = items.length===0
+      ? <div className="empty" style={{padding:24}}><div>No viewings on this day</div></div>
+      : <div>{items.map((v,j)=>(
+          <div key={j} style={{display:'flex',gap:10,alignItems:'center',padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
+            <div style={{width:6,height:36,borderRadius:3,background:CAL_COLOUR(v.status),flexShrink:0}}></div>
+            <div style={{width:64,fontWeight:600}}>{v.requested_time}</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:500}}>{v.property_reference?`${v.property_reference} · `:''}{v.agency_name||''}</div>
+              <div style={{fontSize:12,color:'var(--mid)'}}>{v.buyer_reference||'—'}{v.address_line1?` · ${v.city||''}`:''}</div>
+            </div>
+            <Badge status={v.status} />
+          </div>
+        ))}</div>;
+  }
+
+  return (
+    <div className="card" style={{marginBottom:16}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,gap:8,flexWrap:'wrap'}}>
+        <div style={{display:'flex',gap:4}}>
+          {['day','week','month'].map(m=>(
+            <button key={m} className="btn btn-sm" onClick={()=>setMode(m)}
+              style={{textTransform:'capitalize',background:mode===m?'var(--purple)':'var(--light)',color:mode===m?'#fff':'var(--mid)',borderColor:mode===m?'var(--purple)':'var(--border)'}}>{m}</button>
+          ))}
+        </div>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          <button className="btn btn-sm" onClick={()=>shift(-1)}>‹</button>
+          <button className="btn btn-sm" onClick={()=>setCursor(new Date())}>Today</button>
+          <button className="btn btn-sm" onClick={()=>shift(1)}>›</button>
+        </div>
+      </div>
+      <div style={{fontWeight:600,fontFamily:"'Cormorant Garamond', serif",fontSize:17,marginBottom:10}}>{title}</div>
+      {body}
+      <div style={{display:'flex',gap:12,marginTop:10,fontSize:10,color:'var(--mid)',flexWrap:'wrap'}}>
+        {[['Confirmed','var(--green)'],['Pending','var(--amber)'],['Completed','var(--purple)'],['Declined','var(--red)']].map(([l,col])=>(
+          <span key={l}><span style={{display:'inline-block',width:8,height:8,background:col,borderRadius:2,marginRight:4}}></span>{l}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ViewingsView({ propId }) {
   const { authApi, user } = useAuth();
-  const { prop } = useProperty();
   const [properties, setProperties] = React.useState([]);
+  const [selectedProps, setSelectedProps] = React.useState(propId?[propId]:[]);
   const [selectedProp, setSelectedProp] = React.useState(propId||null);
+  const [allViewings, setAllViewings] = React.useState([]);
   const [viewings, setViewings] = React.useState([]);
   const [availability, setAvailability] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
@@ -548,83 +651,85 @@ function ViewingsView({ propId }) {
   const [booking, setBooking] = React.useState(false);
   const [success, setSuccess] = React.useState('');
 
+  const single = selectedProps.length===1 ? selectedProps[0] : null;
+  const loadAll = () => authApi('GET', '/viewings').then(v=>setAllViewings(v||[])).catch(()=>{});
+
   React.useEffect(() => {
-    authApi('GET', '/properties').then(ps => {
-      setProperties(ps);
-      const pid = propId || (ps[0]&&ps[0].id);
-      if(pid) loadProperty(pid);
-    });
-  }, [propId]);
+    authApi('GET', '/properties').then(ps => setProperties(ps||[])).catch(()=>{});
+    loadAll();
+  }, []);
+
+  React.useEffect(() => {
+    if (single) loadProperty(single);
+    else { setSelectedProp(null); setViewings([]); setAvailability(null); setShowBook(false); }
+  }, [single]);
 
   const loadProperty = async (pid) => {
-    setSelectedProp(pid);
-    setLoading(true);
+    setSelectedProp(pid); setLoading(true);
     const v = await authApi('GET', `/properties/${pid}/viewings`).catch(()=>[]);
     const a = await authApi('GET', `/properties/${pid}/availability`).catch(()=>null);
-    setViewings(v || []);
-    setAvailability(a);
-    setLoading(false);
+    setViewings(v || []); setAvailability(a); setLoading(false);
   };
-
   const loadSlots = async (date) => {
     setBookDate(date); setSelectedSlot(null);
     if (!date || !selectedProp) return;
     const data = await authApi('GET', `/properties/${selectedProp}/available-slots?date=${date}`).catch(()=>({slots:[]}));
     setSlots(data.slots || []);
   };
-
   const doBook = async () => {
     if (!selectedSlot || !buyerRef.trim()) { setBookError('Please select a slot and enter a buyer reference'); return; }
     setBooking(true); setBookError('');
     try {
-      await authApi('POST', `/properties/${selectedProp}/viewings`, {
-        requested_date: bookDate, requested_time: selectedSlot.time,
-        buyer_reference: buyerRef, buyer_notes: buyerNotes
-      });
+      await authApi('POST', `/properties/${selectedProp}/viewings`, { requested_date: bookDate, requested_time: selectedSlot.time, buyer_reference: buyerRef, buyer_notes: buyerNotes });
       setSuccess(`Viewing ${selectedSlot.mode === 'instant' ? 'confirmed' : 'request submitted'} for ${bookDate} at ${selectedSlot.time}`);
       setShowBook(false); setBuyerRef(''); setBuyerNotes(''); setSelectedSlot(null);
-      loadProperty(selectedProp);
-    } catch (err) {
-      setBookError(err.message);
-    } finally { setBooking(false); }
+      loadProperty(selectedProp); loadAll();
+    } catch (err) { setBookError(err.message); } finally { setBooking(false); }
   };
-
   const doConfirm = async (viewingId, action) => {
     await authApi('POST', `/properties/${selectedProp}/viewings/${viewingId}/confirm`, {action}).catch(()=>{});
-    loadProperty(selectedProp);
+    loadProperty(selectedProp); loadAll();
   };
+  const toggleProp = (pid) => setSelectedProps(s => s.includes(pid) ? s.filter(x=>x!==pid) : [...s, pid]);
 
+  const filtered = selectedProps.length ? allViewings.filter(v=>selectedProps.includes(v.property_id)) : allViewings;
   const stats = {
-    total: viewings.length,
-    confirmed: viewings.filter(v=>v.status==='confirmed').length,
-    pending: viewings.filter(v=>v.status==='pending').length,
-    completed: viewings.filter(v=>v.status==='completed').length,
+    total: filtered.length,
+    confirmed: filtered.filter(v=>v.status==='confirmed').length,
+    pending: filtered.filter(v=>v.status==='pending').length,
+    completed: filtered.filter(v=>v.status==='completed').length,
   };
 
   return (
     <div>
-      <PageHeader title="Viewings" subtitle="Manage viewing bookings and availability"
-        actions={['broker','agent'].includes(user?.role) && <button className="btn btn-primary btn-sm" onClick={()=>setShowBook(!showBook)}>+ Book viewing</button>} />
+      <PageHeader title="Viewings" subtitle={selectedProps.length?`${selectedProps.length} propert${selectedProps.length>1?'ies':'y'} selected`:"All viewings across your properties"}
+        actions={single && ['broker','agent'].includes(user?.role) && <button className="btn btn-primary btn-sm" onClick={()=>setShowBook(!showBook)}>+ Book viewing</button>} />
 
-      {properties.length > 1 && !propId && (
-        <div className="field" style={{marginBottom:16}}>
-          <label>Property</label>
-          <select value={selectedProp||''} onChange={e=>loadProperty(Number(e.target.value))}>
-            {properties.map(p=><option key={p.id} value={p.id}>{p.address_line1}, {p.city}</option>)}
-          </select>
+      {!propId && properties.length>0 && (
+        <div className="card" style={{marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Filter by property {selectedProps.length>0?`(${selectedProps.length} selected)`:'(showing all)'}</div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            <button className="btn btn-sm" onClick={()=>setSelectedProps([])} style={{background:selectedProps.length===0?'var(--purple)':'var(--light)',color:selectedProps.length===0?'#fff':'var(--mid)',borderColor:selectedProps.length===0?'var(--purple)':'var(--border)'}}>All properties</button>
+            {properties.map(p=>(
+              <button key={p.id} className="btn btn-sm" onClick={()=>toggleProp(p.id)} style={{background:selectedProps.includes(p.id)?'var(--purple)':'var(--light)',color:selectedProps.includes(p.id)?'#fff':'var(--mid)',borderColor:selectedProps.includes(p.id)?'var(--purple)':'var(--border)'}}>{p.reference||('#'+p.id)} · {p.city}</button>
+            ))}
+          </div>
+          {selectedProps.length>1 && <div style={{fontSize:11,color:'var(--mid)',marginTop:8}}>Showing {selectedProps.length} properties together. Select a single property to book a viewing or manage availability.</div>}
         </div>
       )}
 
       {success && <InfoBox type="green">{success}</InfoBox>}
 
       <div className="stat-grid">
-        <div className="stat"><div className="stat-val">{stats.total}</div><div className="stat-lbl">Total requests</div></div>
+        <div className="stat"><div className="stat-val">{stats.total}</div><div className="stat-lbl">Total viewings</div></div>
         <div className="stat"><div className="stat-val">{stats.confirmed}</div><div className="stat-lbl">Confirmed</div></div>
         <div className="stat"><div className="stat-val">{stats.pending}</div><div className="stat-lbl">Pending confirm</div></div>
         <div className="stat"><div className="stat-val">{stats.completed}</div><div className="stat-lbl">Completed</div></div>
       </div>
 
-      {showBook && (
+      <ViewingsCalendar viewings={filtered} />
+
+      {showBook && single && (
         <div className="card" style={{marginBottom:16}}>
           <h3 style={{marginBottom:14,fontSize:16}}>Book a viewing</h3>
           <InfoBox type="purple" label="Agent isolation">
@@ -661,39 +766,61 @@ function ViewingsView({ propId }) {
         </div>
       )}
 
-      {loading ? <Spinner /> : viewings.length === 0 ? (
-        <div className="empty"><div className="empty-icon">📅</div><div>No viewings yet</div></div>
-      ) : (
-        <div className="card">
-          <table className="table">
-            <thead><tr><th>Date & time</th><th>Agency</th>{user?.role==='broker'&&<th>Negotiator</th>}<th>Buyer</th><th>Mode</th><th>Status</th>{['broker','vendor'].includes(user?.role)&&<th>Action</th>}</tr></thead>
-            <tbody>
-              {viewings.map(v => (
-                <tr key={v.id}>
-                  <td style={{fontWeight:500}}>{v.requested_date}<br/><span style={{color:'var(--mid)',fontSize:12}}>{v.requested_time}{v.slot_end_time?` – ${v.slot_end_time}`:''}</span></td>
-                  <td>{v.agency_name}</td>
-                  {user?.role==='broker'&&<td style={{fontSize:12}}>{v.negotiator_name}</td>}
-                  <td style={{fontSize:12,color:'var(--mid)'}}>{v.buyer_reference||'—'}</td>
-                  <td><span className={`badge ${v.booking_mode==='instant'?'badge-green':'badge-blue'}`}>{v.booking_mode==='instant'?'Instant':'Confirm'}</span></td>
-                  <td><Badge status={v.status} /></td>
-                  {['broker','vendor'].includes(user?.role) && (
-                    <td>
-                      {v.status === 'pending' && (
+      {single ? (
+        loading ? <Spinner /> : viewings.length === 0 ? (
+          <div className="empty"><div className="empty-icon">📅</div><div>No viewings for this property yet</div></div>
+        ) : (
+          <div className="card">
+            <table className="table">
+              <thead><tr><th>Date & time</th><th>Agency</th>{user?.role==='broker'&&<th>Negotiator</th>}<th>Buyer</th><th>Mode</th><th>Status</th>{['broker','vendor'].includes(user?.role)&&<th>Action</th>}</tr></thead>
+              <tbody>
+                {viewings.map(v => (
+                  <tr key={v.id}>
+                    <td style={{fontWeight:500}}>{v.requested_date}<br/><span style={{color:'var(--mid)',fontSize:12}}>{v.requested_time}{v.slot_end_time?` – ${v.slot_end_time}`:''}</span></td>
+                    <td>{v.agency_name}</td>
+                    {user?.role==='broker'&&<td style={{fontSize:12}}>{v.negotiator_name}</td>}
+                    <td style={{fontSize:12,color:'var(--mid)'}}>{v.buyer_reference||'—'}</td>
+                    <td><span className={`badge ${v.booking_mode==='instant'?'badge-green':'badge-blue'}`}>{v.booking_mode==='instant'?'Instant':'Confirm'}</span></td>
+                    <td><Badge status={v.status} /></td>
+                    {['broker','vendor'].includes(user?.role) && (
+                      <td>{v.status === 'pending' && (
                         <div style={{display:'flex',gap:4}}>
                           <button className="btn btn-sm btn-green" onClick={()=>doConfirm(v.id,'confirm')}>Confirm</button>
                           <button className="btn btn-sm btn-danger" onClick={()=>doConfirm(v.id,'decline')}>Decline</button>
                         </div>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                      )}</td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : (
+        filtered.length === 0 ? (
+          <div className="empty"><div className="empty-icon">📅</div><div>No viewings{selectedProps.length?' for the selected properties':''} yet</div></div>
+        ) : (
+          <div className="card">
+            <div style={{fontSize:12,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>All viewings ({filtered.length})</div>
+            <table className="table">
+              <thead><tr><th>Property</th><th>Date & time</th><th>Agency</th><th>Buyer</th><th>Status</th></tr></thead>
+              <tbody>
+                {filtered.map(v => (
+                  <tr key={v.id}>
+                    <td style={{fontWeight:500,fontFamily:'monospace',fontSize:12}}>{v.property_reference||('#'+v.property_id)}<div style={{fontWeight:400,color:'var(--mid)'}}>{v.city}</div></td>
+                    <td>{v.requested_date}<br/><span style={{color:'var(--mid)',fontSize:12}}>{v.requested_time}</span></td>
+                    <td style={{fontSize:12}}>{v.agency_name||'—'}</td>
+                    <td style={{fontSize:12,color:'var(--mid)'}}>{v.buyer_reference||'—'}</td>
+                    <td><Badge status={v.status} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       )}
 
-      {user?.role === 'broker' && availability && (
+      {single && user?.role === 'broker' && availability && (
         <div style={{marginTop:20}}>
           <h3 style={{fontSize:16,marginBottom:10}}>Availability settings</h3>
           <div className="card">

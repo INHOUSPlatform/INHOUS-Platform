@@ -551,6 +551,29 @@ def _time_to_mins(t):
 def _mins_to_time(m):
     return f"{m // 60:02d}:{m % 60:02d}"
 
+@app.route('/api/viewings', methods=['GET'])
+@require_auth
+def all_viewings():
+    """All viewings across the properties this user can see (for the calendar)."""
+    db = get_db()
+    cols = '''vr.id, vr.property_id, vr.requested_date, vr.requested_time, vr.slot_end_time,
+              vr.status, vr.booking_mode, vr.agency_name, vr.buyer_reference,
+              p.reference as property_reference, p.address_line1, p.city'''
+    if g.role == 'broker':
+        rows = db.execute(f'''SELECT {cols}, vr.negotiator_name FROM viewing_requests vr
+            JOIN properties p ON vr.property_id=p.id ORDER BY vr.requested_date, vr.requested_time''').fetchall()
+    elif g.role == 'agent':
+        rows = db.execute(f'''SELECT {cols} FROM viewing_requests vr
+            JOIN properties p ON vr.property_id=p.id
+            WHERE vr.requested_by=? ORDER BY vr.requested_date, vr.requested_time''', (g.user_id,)).fetchall()
+    else:
+        rows = db.execute(f'''SELECT {cols} FROM viewing_requests vr
+            JOIN properties p ON vr.property_id=p.id
+            WHERE vr.property_id IN (SELECT property_id FROM property_access WHERE user_id=?)
+            ORDER BY vr.requested_date, vr.requested_time''', (g.user_id,)).fetchall()
+    db.close()
+    return jsonify(rows_to_list(rows))
+
 @app.route('/api/properties/<int:property_id>/viewings', methods=['GET'])
 @require_auth
 @require_property_access
