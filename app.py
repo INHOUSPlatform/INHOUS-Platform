@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, g, send_from_directory, send_file
 import os, json, datetime, secrets
-from database import get_db, init_db, audit
+from database import get_db, init_db, audit, make_property_reference
 from auth import (hash_password, verify_password, generate_token,
                   require_auth, require_role, require_property_access,
                   generate_invite_token)
@@ -229,7 +229,8 @@ def create_property():
         data.get('notes')
     ))
     prop_id = c.lastrowid
-    db.execute("UPDATE properties SET reference=? WHERE id=?", (f"INH-{prop_id:05d}", prop_id))
+    db.execute("UPDATE properties SET reference=? WHERE id=?",
+               (make_property_reference(country, prop_id, data.get('address_line1')), prop_id))
     # Log launch price
     if guide_price:
         db.execute('INSERT INTO price_log (property_id,price,event_type,logged_by) VALUES (?,?,?,?)',
@@ -334,17 +335,19 @@ def send_invite(property_id):
 def get_invite(token):
     db = get_db()
     invite = db.execute(
-        'SELECT i.*, p.address_line1, p.city, p.postcode FROM invites i LEFT JOIN properties p ON i.property_id=p.id WHERE i.token=? AND i.used_at IS NULL AND i.expires_at > CURRENT_TIMESTAMP',
+        'SELECT i.*, p.reference, p.city, p.country FROM invites i LEFT JOIN properties p ON i.property_id=p.id WHERE i.token=? AND i.used_at IS NULL AND i.expires_at > CURRENT_TIMESTAMP',
         (token,)
     ).fetchone()
     db.close()
     if not invite:
         return jsonify({'error': 'Invite is invalid or has expired'}), 404
+    # Privacy: expose only the reference + city/country, never the full street/postcode
     return jsonify({
         'email': invite['email'],
         'role': invite['role'],
         'agency_name': invite['agency_name'],
-        'property_address': f"{invite['address_line1']}, {invite['city']} {invite['postcode']}" if invite['address_line1'] else None,
+        'property_reference': invite['reference'],
+        'property_location': f"{invite['city']}, {invite['country']}" if invite['city'] else None,
         'message': invite['message'],
     })
 

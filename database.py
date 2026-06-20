@@ -1,7 +1,23 @@
 import sqlite3
 import os
+import re
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'inhous.db')
+
+# 2-letter country code used in the property reference (keeps the full address private)
+COUNTRY_CODE = {
+    'United Kingdom':'GB','Ireland':'IE','Spain':'ES','France':'FR','Italy':'IT','Greece':'GR',
+    'United Arab Emirates':'AE','United States':'US','Portugal':'PT','Germany':'DE','Switzerland':'CH',
+    'Netherlands':'NL','Belgium':'BE','Austria':'AT','Luxembourg':'LU','Monaco':'MC',
+}
+
+def make_property_reference(country, prop_id, address_line1):
+    """Privacy-friendly reference: <country>-<unique number>-<short address hint>.
+    e.g. IE-00002-FIN — no full address, postcode or street number exposed."""
+    cc = COUNTRY_CODE.get(country or '', 'XX')
+    words = re.findall(r'[A-Za-z]+', address_line1 or '')
+    abbr = (words[0][:3].upper() if words else 'PRP')
+    return f"{cc}-{prop_id:05d}-{abbr}"
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -388,8 +404,13 @@ def init_db():
             except sqlite3.OperationalError:
                 pass  # column already exists
 
-    # Backfill unique property reference numbers (INH-00001, INH-00002, …)
-    c.execute("UPDATE properties SET reference = printf('INH-%05d', id) WHERE reference IS NULL OR reference = ''")
+    # Backfill / upgrade property references to the privacy-friendly format
+    # (<country>-<number>-<hint>). Recompute blank ones and any legacy INH- codes.
+    for row in c.execute("SELECT id, country, address_line1, reference FROM properties").fetchall():
+        ref = row[3]
+        if not ref or str(ref).startswith('INH-'):
+            c.execute("UPDATE properties SET reference=? WHERE id=?",
+                      (make_property_reference(row[1], row[0], row[2]), row[0]))
 
     conn.commit()
     conn.close()

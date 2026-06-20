@@ -1679,8 +1679,8 @@ function AdminView() {
             <form onSubmit={sendInvite}>
               <div className="field"><label>Property *</label>
                 <select value={inviteForm.property_id} onChange={e=>setInviteForm({...inviteForm,property_id:e.target.value})} required>
-                  <option value="">— Select property —</option>
-                  {properties.map(p=><option key={p.id} value={p.id}>{p.address_line1}</option>)}
+                  <option value="">— Select property by reference —</option>
+                  {properties.map(p=><option key={p.id} value={p.id}>{(p.reference||('#'+p.id))} · {p.city}, {p.country}</option>)}
                 </select>
               </div>
               <div className="field"><label>Email *</label><input type="email" value={inviteForm.email} onChange={e=>setInviteForm({...inviteForm,email:e.target.value})} required /></div>
