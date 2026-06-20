@@ -1198,7 +1198,9 @@ def shared_document_download(token):
 def get_notifications():
     db = get_db()
     notifs = rows_to_list(db.execute(
-        'SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 50',
+        '''SELECT n.*, p.address_line1 AS property_address, p.city AS property_city
+           FROM notifications n LEFT JOIN properties p ON n.property_id = p.id
+           WHERE n.user_id=? ORDER BY n.created_at DESC LIMIT 50''',
         (g.user_id,)
     ).fetchall())
     db.close()

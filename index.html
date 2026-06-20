@@ -1554,22 +1554,35 @@ function NotificationsView() {
       <PageHeader title="Notifications" subtitle={`${notifs.length} notifications`} />
       {loading ? <Spinner /> : notifs.length === 0 ? (
         <div className="empty"><div className="empty-icon">🔔</div><div>No notifications</div></div>
-      ) : (
-        <div className="card">
-          {notifs.map((n,i) => (
-            <div key={n.id} style={{padding:'12px 0',borderBottom:i<notifs.length-1?'1px solid var(--border)':'none',opacity:n.is_read?0.7:1}}>
-              <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
-                <span className={`badge ${typeColor[n.type]||'badge-gray'}`} style={{marginTop:1,flexShrink:0}}>{n.type?.replace(/_/g,' ')}</span>
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:500,fontSize:13}}>{n.title}</div>
-                  {n.message && <div style={{fontSize:12,color:'var(--mid)',marginTop:2}}>{n.message}</div>}
-                  <div style={{fontSize:11,color:'var(--mid)',marginTop:4}}>{n.created_at?.split('T')[0]}</div>
-                </div>
-              </div>
+      ) : (() => {
+        const groups = {};
+        notifs.forEach(n => {
+          const key = n.property_address ? `${n.property_address}${n.property_city?`, ${n.property_city}`:''}` : 'General';
+          (groups[key] = groups[key] || []).push(n);
+        });
+        return Object.entries(groups).map(([propName, list]) => (
+          <div key={propName} style={{marginBottom:16}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+              <span style={{fontSize:13,fontWeight:600,fontFamily:"'Cormorant Garamond', serif",color:'var(--dark)'}}>{propName==='General'?'General':`🏠 ${propName}`}</span>
+              <span className="badge badge-gray">{list.length}</span>
             </div>
-          ))}
-        </div>
-      )}
+            <div className="card">
+              {list.map((n,i) => (
+                <div key={n.id} style={{padding:'12px 0',borderBottom:i<list.length-1?'1px solid var(--border)':'none',opacity:n.is_read?0.7:1}}>
+                  <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                    <span className={`badge ${typeColor[n.type]||'badge-gray'}`} style={{marginTop:1,flexShrink:0}}>{n.type?.replace(/_/g,' ')}</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:500,fontSize:13}}>{n.title}</div>
+                      {n.message && <div style={{fontSize:12,color:'var(--mid)',marginTop:2}}>{n.message}</div>}
+                      <div style={{fontSize:11,color:'var(--mid)',marginTop:4}}>{n.created_at?.split('T')[0]}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ));
+      })()}
     </div>
   );
 }
