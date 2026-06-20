@@ -1038,11 +1038,18 @@ function FeedbackView({ propId }) {
         <div className="card" style={{marginBottom:16}}>
           <h3 style={{fontSize:16,marginBottom:14}}>Log viewing feedback</h3>
           <form onSubmit={submitFeedback}>
-            <div className="field"><label>Select viewing *</label>
-              <select value={selectedViewing} onChange={e=>setSelectedViewing(e.target.value)} required>
-                <option value="">— Select a viewing —</option>
-                {viewings.map(v=><option key={v.id} value={v.id}>{v.requested_date} at {v.requested_time} · {v.agency_name} · {v.buyer_reference||'Buyer'}</option>)}
-              </select>
+            <div className="field"><label>Which viewing is this feedback for? *</label>
+              {viewings.length===0 ? (
+                <InfoBox type="amber" label="No viewings to give feedback on yet">
+                  Feedback is recorded against a specific viewing that has taken place. This property has no confirmed or completed viewings yet — book one on the Viewings page first, then come back to log the feedback.
+                </InfoBox>
+              ) : (
+                <select value={selectedViewing} onChange={e=>setSelectedViewing(e.target.value)} required>
+                  <option value="">— Select a viewing —</option>
+                  {viewings.map(v=><option key={v.id} value={v.id}>{v.requested_date} at {v.requested_time} · {v.buyer_name||v.buyer_reference||'Buyer'} · {v.agency_name}</option>)}
+                </select>
+              )}
+              <div style={{fontSize:11,color:'var(--mid)',marginTop:4}}>Only confirmed or completed viewings appear here — each piece of feedback is tied to the viewing it came from.</div>
             </div>
             <div className="field"><label>Interest level</label>
               <div style={{display:'flex',gap:8,marginTop:4}}>
