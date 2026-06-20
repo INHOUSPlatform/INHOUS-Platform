@@ -731,6 +731,27 @@ function Dictate({ onText }) {
     {listening ? '● Listening…' : '🎤 Dictate'}</button>;
 }
 
+const DIAL_CODES = [
+  ['🇬🇧','+44','UK'],['🇮🇪','+353','Ireland'],['🇪🇸','+34','Spain'],['🇦🇪','+971','UAE'],
+  ['🇫🇷','+33','France'],['🇮🇹','+39','Italy'],['🇬🇷','+30','Greece'],['🇺🇸','+1','USA'],
+  ['🇩🇪','+49','Germany'],['🇨🇭','+41','Switzerland'],['🇵🇹','+351','Portugal'],['🇳🇱','+31','Netherlands'],
+  ['🇧🇪','+32','Belgium'],['🇦🇹','+43','Austria'],['🇱🇺','+352','Luxembourg'],['🇲🇨','+377','Monaco'],
+  ['🇦🇺','+61','Australia'],['🇸🇬','+65','Singapore'],['🇭🇰','+852','Hong Kong'],['🇿🇦','+27','South Africa'],
+];
+function PhoneInput({ value, onChange, defaultDial='+44' }) {
+  const codes = DIAL_CODES.map(c=>c[1]).sort((a,b)=>b.length-a.length);
+  let dial = defaultDial, number = (value||'').trim();
+  for (const c of codes) { if (number.startsWith(c)) { dial=c; number=number.slice(c.length).trim(); break; } }
+  return (
+    <div style={{display:'flex',gap:6}}>
+      <select value={dial} onChange={e=>onChange(`${e.target.value} ${number}`.trim())} style={{flex:'0 0 150px'}}>
+        {DIAL_CODES.map(([f,c,name])=><option key={name+c} value={c}>{f} {c} {name}</option>)}
+      </select>
+      <input value={number} onChange={e=>onChange(`${dial} ${e.target.value}`.trim())} placeholder="612 345 678" style={{flex:1}} />
+    </div>
+  );
+}
+
 function FeedbackAudio({ propId, feedbackId }) {
   const [url, setUrl] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
@@ -1593,7 +1614,7 @@ function AdminView() {
               <div className="field"><label>Full name *</label><input value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})} required /></div>
               <div className="field"><label>Role *</label><select value={form.role} onChange={e=>setForm({...form,role:e.target.value})}>{roleOpts.map(r=><option key={r} value={r}>{r.replace(/_/g,' ')}</option>)}</select></div>
               <div className="field"><label>Agency name</label><input value={form.agency_name} onChange={e=>setForm({...form,agency_name:e.target.value})} /></div>
-              <div className="field"><label>Phone</label><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} /></div>
+              <div className="field"><label>Phone</label><PhoneInput value={form.phone} onChange={v=>setForm({...form,phone:v})} /></div>
               {error && <div className="error-text" style={{marginBottom:8}}>{error}</div>}
               {success && <div className="success-text" style={{marginBottom:8}}>{success}</div>}
               <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>{saving?'Creating…':'Create user'}</button>
@@ -1866,7 +1887,7 @@ function IntroductionsView({ propId }) {
               <div className="field"><label>Category</label><select value={addForm.category} onChange={e=>setAddForm({...addForm,category:e.target.value})}>{INTRO_ORDER.map(c=><option key={c} value={c}>{INTRO_CATS[c]}</option>)}</select></div>
               <div className="field"><label>Company name *</label><input value={addForm.company_name} onChange={e=>setAddForm({...addForm,company_name:e.target.value})} required /></div>
               <div className="field"><label>Contact email</label><input type="email" value={addForm.contact_email} onChange={e=>setAddForm({...addForm,contact_email:e.target.value})} /></div>
-              <div className="field"><label>Contact phone</label><input value={addForm.contact_phone} onChange={e=>setAddForm({...addForm,contact_phone:e.target.value})} /></div>
+              <div className="field"><label>Contact phone</label><PhoneInput value={addForm.contact_phone} onChange={v=>setAddForm({...addForm,contact_phone:v})} /></div>
             </div>
             <div className="field"><label>Website</label><input value={addForm.website_url} onChange={e=>setAddForm({...addForm,website_url:e.target.value})} placeholder="https://" /></div>
             <div className="field"><label>Short description</label><input value={addForm.notes} onChange={e=>setAddForm({...addForm,notes:e.target.value})} placeholder="e.g. Full-service luxury interior design" /></div>
