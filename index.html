@@ -535,7 +535,8 @@ const calPad = n => String(n).padStart(2,'0');
 const calDs = d => `${d.getFullYear()}-${calPad(d.getMonth()+1)}-${calPad(d.getDate())}`;
 function calChipLabel(v){ return `${v.requested_time||''}${v.property_reference?` · ${v.property_reference}`:(v.agency_name?` · ${v.agency_name}`:'')}`; }
 
-function ViewingsCalendar({ viewings }) {
+function ViewingsCalendar({ viewings, legend }) {
+  const legendItems = legend || [['Confirmed','var(--green)'],['Pending','var(--amber)'],['Completed','var(--purple)'],['Declined','var(--red)']];
   const [mode, setMode] = React.useState('month');   // day | week | month
   const [cursor, setCursor] = React.useState(()=>new Date());
   const todayStr = calDs(new Date());
@@ -624,7 +625,7 @@ function ViewingsCalendar({ viewings }) {
       <div style={{fontWeight:600,fontFamily:"'Cormorant Garamond', serif",fontSize:17,marginBottom:10}}>{title}</div>
       {body}
       <div style={{display:'flex',gap:12,marginTop:10,fontSize:10,color:'var(--mid)',flexWrap:'wrap'}}>
-        {[['Confirmed','var(--green)'],['Pending','var(--amber)'],['Completed','var(--purple)'],['Declined','var(--red)']].map(([l,col])=>(
+        {legendItems.map(([l,col])=>(
           <span key={l}><span style={{display:'inline-block',width:8,height:8,background:col,borderRadius:2,marginRight:4}}></span>{l}</span>
         ))}
       </div>
@@ -1368,8 +1369,10 @@ function DocumentsView({ propId }) {
   const [shareBusy, setShareBusy] = React.useState(false);
   const [allDocs, setAllDocs] = React.useState([]);
   const [docStatusFilter, setDocStatusFilter] = React.useState('action'); // action = pending+rejected
+  const [reqs, setReqs] = React.useState([]);
 
   const loadAllDocs = () => authApi('GET','/documents').then(d=>setAllDocs(d||[])).catch(()=>{});
+  const loadReqs = () => { if(user?.role==='broker') authApi('GET','/document-requirements').then(r=>setReqs(r||[])).catch(()=>{}); };
 
   React.useEffect(() => {
     authApi('GET', '/properties').then(ps => {
@@ -1377,7 +1380,7 @@ function DocumentsView({ propId }) {
       const pid = propId || (ps[0]&&ps[0].id);
       if(pid) loadDocs(pid);
     });
-    loadAllDocs();
+    loadAllDocs(); loadReqs();
   }, [propId]);
 
   const loadDocs = async (pid) => {
@@ -1415,7 +1418,7 @@ function DocumentsView({ propId }) {
     }
     setUploading(false);
     setMsg({ ok: fail===0, text: `${ok} file${ok!==1?'s':''} uploaded${fail?`, ${fail} failed`:''}.` });
-    loadDocs(selectedProp);
+    loadDocs(selectedProp); loadAllDocs(); loadReqs();
   };
 
   const onInput = (e) => { uploadFiles(e.target.files); if(e.target) e.target.value=''; };
@@ -1477,6 +1480,43 @@ function DocumentsView({ propId }) {
                         {user?.role==='broker' && d.status!=='approved' && <button className="btn btn-sm btn-green" style={{marginLeft:4}} onClick={()=>setDocStatus(d,'approved')}>Approve</button>}
                         {user?.role==='broker' && d.status!=='rejected' && <button className="btn btn-sm btn-danger" style={{marginLeft:4}} onClick={()=>setDocStatus(d,'rejected')}>Reject</button>}
                       </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        );
+      })()}
+      {user?.role==='broker' && (() => {
+        const today = new Date().toISOString().split('T')[0];
+        const soonStr = new Date(Date.now()+7*86400000).toISOString().split('T')[0];
+        const outstanding = reqs.filter(r=>!r.satisfied);
+        const overdue = outstanding.filter(r=>r.overdue);
+        const dueSoon = outstanding.filter(r=>!r.overdue && r.due_date && r.due_date<=soonStr);
+        const calItems = reqs.map(r=>({ requested_date:r.due_date, requested_time:'', status: r.satisfied?'confirmed':(r.overdue?'declined':'pending'), property_reference:`${r.property_reference||('#'+r.property_id)} · ${docTypeLabel[r.doc_type]||r.doc_type}`, agency_name:docTypeLabel[r.doc_type]||r.doc_type, buyer_reference:r.city }));
+        const ordered = [...outstanding].sort((a,b)=>(a.due_date||'').localeCompare(b.due_date||''));
+        const dueBadge = (r)=> r.overdue ? <span className="badge badge-red">Overdue</span> : (r.due_date&&r.due_date<=soonStr ? <span className="badge badge-amber">Due soon</span> : <span className="badge badge-gray">Upcoming</span>);
+        return (
+          <div className="card" style={{marginBottom:16}}>
+            <div style={{fontSize:12,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:10}}>Required documents — timeline across all properties</div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12,fontSize:12}}>
+              <span className="badge badge-red">{overdue.length} overdue</span>
+              <span className="badge badge-amber">{dueSoon.length} due within 7 days</span>
+              <span className="badge badge-gray">{outstanding.length} outstanding</span>
+              <span className="badge badge-green">{reqs.length-outstanding.length} uploaded</span>
+            </div>
+            <ViewingsCalendar viewings={calItems} legend={[['Uploaded','var(--green)'],['Due / upcoming','var(--amber)'],['Overdue','var(--red)']]} />
+            {ordered.length===0 ? <div style={{fontSize:12,color:'var(--mid)'}}>All required documents are in. 🎉</div> : (
+              <table className="table">
+                <thead><tr><th>Property</th><th>Required document</th><th>Due</th><th>Status</th></tr></thead>
+                <tbody>
+                  {ordered.map(r=>(
+                    <tr key={r.id}>
+                      <td style={{fontSize:12}}><span style={{fontFamily:'monospace'}}>{r.property_reference||('#'+r.property_id)}</span><div style={{color:'var(--mid)'}}>{r.city}</div></td>
+                      <td style={{fontWeight:500}}>{docTypeLabel[r.doc_type]||r.doc_type}</td>
+                      <td style={{fontSize:12,color:r.overdue?'var(--red)':'var(--mid)'}}>{r.due_date||'—'}</td>
+                      <td>{dueBadge(r)}</td>
                     </tr>
                   ))}
                 </tbody>

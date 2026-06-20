@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, g, send_from_directory, send_file
 import os, json, datetime, secrets
-from database import get_db, init_db, audit, make_property_reference
+from database import get_db, init_db, audit, make_property_reference, default_requirements
 from auth import (hash_password, verify_password, generate_token,
                   require_auth, require_role, require_property_access,
                   generate_invite_token)
@@ -231,6 +231,9 @@ def create_property():
     prop_id = c.lastrowid
     db.execute("UPDATE properties SET reference=? WHERE id=?",
                (make_property_reference(country, prop_id, data.get('address_line1')), prop_id))
+    # Seed the default required-documents checklist with due dates
+    for dt, due in default_requirements(datetime.date.today().isoformat()):
+        db.execute("INSERT OR IGNORE INTO document_requirements (property_id, doc_type, due_date) VALUES (?,?,?)", (prop_id, dt, due))
     # Log launch price
     if guide_price:
         db.execute('INSERT INTO price_log (property_id,price,event_type,logged_by) VALUES (?,?,?,?)',
@@ -1055,6 +1058,28 @@ def certify_aml(property_id, aml_id):
 # ══════════════════════════════════════════════════════════════════════════════
 # DOCUMENTS
 # ══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/api/document-requirements', methods=['GET'])
+@require_role('broker')
+def document_requirements():
+    """Outstanding (and satisfied) required documents across active properties, with due
+    dates — for the all-properties checklist + due-date calendar."""
+    db = get_db()
+    rows = db.execute('''
+        SELECT dr.id, dr.property_id, dr.doc_type, dr.due_date,
+               p.reference AS property_reference, p.city, p.status AS property_status,
+               EXISTS(SELECT 1 FROM documents d WHERE d.property_id=dr.property_id AND d.doc_type=dr.doc_type) AS satisfied
+        FROM document_requirements dr JOIN properties p ON dr.property_id=p.id
+        WHERE p.status NOT IN ('sold','withdrawn')
+        ORDER BY dr.due_date''').fetchall()
+    db.close()
+    today = datetime.date.today().isoformat()
+    out = []
+    for r in rows_to_list(rows):
+        r['satisfied'] = bool(r['satisfied'])
+        r['overdue'] = (not r['satisfied']) and bool(r['due_date']) and r['due_date'] < today
+        out.append(r)
+    return jsonify(out)
 
 @app.route('/api/documents', methods=['GET'])
 @require_auth

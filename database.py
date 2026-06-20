@@ -1,8 +1,23 @@
 import sqlite3
 import os
 import re
+import datetime
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'inhous.db')
+
+# Standard required-document checklist with a due offset (days from listing) for each.
+REQUIRED_DOCS = [
+    ('floorplan', 7), ('photo', 7), ('epc', 10), ('title_register', 14),
+    ('brochure', 14), ('aml_vendor', 14), ('memo_of_sale', 30),
+    ('aml_buyer', 30), ('proof_of_funds', 30),
+]
+
+def default_requirements(created_date_iso):
+    try:
+        base = datetime.date.fromisoformat((created_date_iso or '')[:10])
+    except ValueError:
+        base = datetime.date.today()
+    return [(dt, (base + datetime.timedelta(days=days)).isoformat()) for dt, days in REQUIRED_DOCS]
 
 # 2-letter country code used in the property reference (keeps the full address private)
 COUNTRY_CODE = {
@@ -363,6 +378,17 @@ def init_db():
         last_accessed_at DATETIME
     )''')
 
+    # ── DOCUMENT REQUIREMENTS (checklist of required docs + due dates) ────────
+    c.execute('''CREATE TABLE IF NOT EXISTS document_requirements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        property_id INTEGER NOT NULL REFERENCES properties(id),
+        doc_type TEXT NOT NULL,
+        due_date TEXT,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(property_id, doc_type)
+    )''')
+
     # ── BROCHURES (one per property; assembled from photos + details) ─────────
     c.execute('''CREATE TABLE IF NOT EXISTS brochures (
         property_id INTEGER PRIMARY KEY REFERENCES properties(id),
@@ -411,6 +437,12 @@ def init_db():
         if not ref or str(ref).startswith('INH-'):
             c.execute("UPDATE properties SET reference=? WHERE id=?",
                       (make_property_reference(row[1], row[0], row[2]), row[0]))
+
+    # Seed the default document-requirements checklist for properties that have none
+    for prop in c.execute("SELECT id, created_at FROM properties").fetchall():
+        if not c.execute("SELECT 1 FROM document_requirements WHERE property_id=? LIMIT 1", (prop['id'],)).fetchone():
+            for dt, due in default_requirements(prop['created_at']):
+                c.execute("INSERT OR IGNORE INTO document_requirements (property_id, doc_type, due_date) VALUES (?,?,?)", (prop['id'], dt, due))
 
     conn.commit()
     conn.close()
