@@ -845,7 +845,7 @@ def get_offers(property_id):
                   o.proposed_completion, o.proof_of_funds_status, o.buyer_aml_status,
                   o.counter_amount, o.agency_name, o.buyer_solicitor_firm,
                   o.accepted_at, o.declined_at, o.valid_until,
-                  o.offer_date, o.reason_for_purchase, o.properties_viewed'''
+                  o.offer_date, o.reason_for_purchase, o.properties_viewed, o.counter_notes'''
         if g.role == 'broker':
             cols += ''', o.negotiator_name, o.broker_notes,
                        o.agent_notes, o.buyer_email, o.buyer_phone,

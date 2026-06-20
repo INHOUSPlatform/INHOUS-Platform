@@ -1189,6 +1189,9 @@ function OffersView({ propId }) {
   const [form, setForm] = React.useState({ offer_date:'', amount:'', buyer_full_name:'', reason_for_purchase:'', properties_viewed:'', property_to_sell:'', purchase_method:'cash', financial_provider:'', chain_status:'chain_free', proposed_exchange:'', proposed_completion:'', buyer_solicitor_firm:'', buyer_solicitor_name:'', buyer_solicitor_email:'', conditions:'', agent_notes:'' });
   const [error, setError] = React.useState('');
   const [saving, setSaving] = React.useState(false);
+  const [counterFor, setCounterFor] = React.useState(null);
+  const [counterAmt, setCounterAmt] = React.useState('');
+  const [counterNotes, setCounterNotes] = React.useState('');
 
   React.useEffect(() => {
     authApi('GET', '/properties').then(ps => {
@@ -1197,6 +1200,15 @@ function OffersView({ propId }) {
       if(pid) loadOffers(pid);
     });
   }, [propId]);
+
+  const sym = (CURRENCY_SYM[(properties.find(p=>p.id===selectedProp)||{}).currency||'GBP']) || '£';
+  const openCounter = (offer) => { setCounterFor(offer.id); setCounterAmt(String(offer.amount||'')); setCounterNotes(''); };
+  const sendCounter = async (offerId) => {
+    const amt = parseInt(counterAmt)||0;
+    if (!amt) { return; }
+    await authApi('POST', `/properties/${selectedProp}/offers/${offerId}/action`, {action:'counter', counter_amount:amt, counter_notes:counterNotes}).catch(()=>{});
+    setCounterFor(null); loadOffers(selectedProp);
+  };
 
   const loadOffers = async (pid) => {
     setSelectedProp(pid); setLoading(true);
@@ -1301,12 +1313,29 @@ function OffersView({ propId }) {
               )}
               {offer.conditions && <div style={{fontSize:12,color:'var(--mid)',marginBottom:8}}><b>Conditions:</b> {offer.conditions}</div>}
               {offer.agent_notes && <div style={{fontSize:12,color:'var(--mid)',marginBottom:8}}><b>Comments:</b> {offer.agent_notes}</div>}
-              {['broker','vendor'].includes(user?.role) && offer.status==='submitted' && (
+              {['broker','vendor'].includes(user?.role) && offer.status==='submitted' && counterFor!==offer.id && (
                 <div style={{display:'flex',gap:6,marginTop:8}}>
                   <button className="btn btn-sm btn-green" onClick={()=>doAction(offer.id,'accept')}>Accept offer</button>
                   <button className="btn btn-sm" onClick={()=>doAction(offer.id,'decline')}>Decline</button>
-                  <button className="btn btn-sm btn-primary" onClick={()=>doAction(offer.id,'counter',{counter_amount:Math.round(offer.amount*0.98),counter_notes:'Counter at adjusted figure'})}>Counter</button>
+                  <button className="btn btn-sm btn-primary" onClick={()=>openCounter(offer)}>Counter…</button>
                 </div>
+              )}
+              {['broker','vendor'].includes(user?.role) && offer.status==='submitted' && counterFor===offer.id && (
+                <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border)'}}>
+                  <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>Counter offer</div>
+                  <div className="grid2">
+                    <div className="field"><label>Counter amount ({sym.trim()}) *</label><input type="number" value={counterAmt} onChange={e=>setCounterAmt(e.target.value)} placeholder="e.g. 6450000" autoFocus /></div>
+                  </div>
+                  <div className="field"><label style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>Conditions of the counter <Dictate onText={t=>setCounterNotes(v=>(v?v+' ':'')+t)} /></label>
+                    <textarea value={counterNotes} onChange={e=>setCounterNotes(e.target.value)} placeholder="e.g. Vendor will accept this figure for an early exchange and inclusion of fixtures." style={{minHeight:70}} /></div>
+                  <div style={{display:'flex',gap:8}}>
+                    <button className="btn btn-sm btn-primary" onClick={()=>sendCounter(offer.id)} disabled={!(parseInt(counterAmt)||0)}>Send counter offer</button>
+                    <button className="btn btn-sm" onClick={()=>setCounterFor(null)}>Cancel</button>
+                  </div>
+                </div>
+              )}
+              {offer.status==='countered' && offer.counter_amount && (
+                <InfoBox type="amber" label="Countered">Countered at {sym}{Number(offer.counter_amount).toLocaleString()}{offer.counter_notes?` — ${offer.counter_notes}`:''}</InfoBox>
               )}
               {offer.status==='accepted' && (
                 <InfoBox type="green" label="Accepted — next steps">
