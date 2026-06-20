@@ -600,7 +600,7 @@ function ViewingsCalendar({ viewings, legend }) {
             <div style={{width:64,fontWeight:600}}>{v.requested_time}</div>
             <div style={{flex:1}}>
               <div style={{fontSize:13,fontWeight:500}}>{v.property_reference?`${v.property_reference} · `:''}{v.agency_name||''}</div>
-              <div style={{fontSize:12,color:'var(--mid)'}}>{v.buyer_reference||'—'}{v.address_line1?` · ${v.city||''}`:''}</div>
+              <div style={{fontSize:12,color:'var(--mid)'}}>{v.buyer_name||v.buyer_reference||'—'}{v.address_line1?` · ${v.city||''}`:''}</div>
             </div>
             <Badge status={v.status} />
           </div>
@@ -643,9 +643,11 @@ function ViewingsView({ propId }) {
   const [availability, setAvailability] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
   const [showBook, setShowBook] = React.useState(false);
+  const [bookProp, setBookProp] = React.useState(propId||null);
   const [bookDate, setBookDate] = React.useState('');
   const [slots, setSlots] = React.useState([]);
   const [selectedSlot, setSelectedSlot] = React.useState(null);
+  const [buyerName, setBuyerName] = React.useState('');
   const [buyerRef, setBuyerRef] = React.useState('');
   const [buyerNotes, setBuyerNotes] = React.useState('');
   const [bookError, setBookError] = React.useState('');
@@ -672,20 +674,24 @@ function ViewingsView({ propId }) {
     const a = await authApi('GET', `/properties/${pid}/availability`).catch(()=>null);
     setViewings(v || []); setAvailability(a); setLoading(false);
   };
+  const openBook = () => { setShowBook(true); setBookProp(single || (properties[0]&&properties[0].id) || null); setBookDate(''); setSlots([]); setSelectedSlot(null); setBuyerName(''); setBuyerRef(''); setBuyerNotes(''); setBookError(''); };
+  const pickBookProp = (pid) => { setBookProp(pid); setBookDate(''); setSlots([]); setSelectedSlot(null); };
   const loadSlots = async (date) => {
     setBookDate(date); setSelectedSlot(null);
-    if (!date || !selectedProp) return;
-    const data = await authApi('GET', `/properties/${selectedProp}/available-slots?date=${date}`).catch(()=>({slots:[]}));
+    if (!date || !bookProp) return;
+    const data = await authApi('GET', `/properties/${bookProp}/available-slots?date=${date}`).catch(()=>({slots:[]}));
     setSlots(data.slots || []);
   };
   const doBook = async () => {
-    if (!selectedSlot || !buyerRef.trim()) { setBookError('Please select a slot and enter a buyer reference'); return; }
+    if (!bookProp) { setBookError('Please choose a property'); return; }
+    if (!selectedSlot) { setBookError('Please choose a date and an available time slot'); return; }
+    if (!buyerName.trim()) { setBookError("Please enter the buyer's name"); return; }
     setBooking(true); setBookError('');
     try {
-      await authApi('POST', `/properties/${selectedProp}/viewings`, { requested_date: bookDate, requested_time: selectedSlot.time, buyer_reference: buyerRef, buyer_notes: buyerNotes });
-      setSuccess(`Viewing ${selectedSlot.mode === 'instant' ? 'confirmed' : 'request submitted'} for ${bookDate} at ${selectedSlot.time}`);
-      setShowBook(false); setBuyerRef(''); setBuyerNotes(''); setSelectedSlot(null);
-      loadProperty(selectedProp); loadAll();
+      await authApi('POST', `/properties/${bookProp}/viewings`, { requested_date: bookDate, requested_time: selectedSlot.time, buyer_name: buyerName, buyer_reference: buyerRef, buyer_notes: buyerNotes });
+      setSuccess(`Viewing ${selectedSlot.mode === 'instant' ? 'confirmed' : 'request submitted'} for ${buyerName} on ${bookDate} at ${selectedSlot.time}`);
+      setShowBook(false); setBuyerName(''); setBuyerRef(''); setBuyerNotes(''); setSelectedSlot(null);
+      loadProperty(bookProp); loadAll();
     } catch (err) { setBookError(err.message); } finally { setBooking(false); }
   };
   const doConfirm = async (viewingId, action) => {
@@ -710,7 +716,7 @@ function ViewingsView({ propId }) {
   return (
     <div>
       <PageHeader title="Viewings" subtitle={selectedProps.length?`${selectedProps.length} propert${selectedProps.length>1?'ies':'y'} selected`:"All viewings across your properties"}
-        actions={single && ['broker','agent'].includes(user?.role) && <button className="btn btn-primary btn-sm" onClick={()=>setShowBook(!showBook)}>+ Book viewing</button>} />
+        actions={['broker','agent'].includes(user?.role) && <button className="btn btn-primary btn-sm" onClick={()=>showBook?setShowBook(false):openBook()}>+ Book viewing</button>} />
 
       {!propId && properties.length>0 && (
         <div className="card" style={{marginBottom:16}}>
@@ -743,14 +749,20 @@ function ViewingsView({ propId }) {
 
       <ViewingsCalendar viewings={displayed} />
 
-      {showBook && single && (
+      {showBook && (
         <div className="card" style={{marginBottom:16}}>
           <h3 style={{marginBottom:14,fontSize:16}}>Book a viewing</h3>
           <InfoBox type="purple" label="Agent isolation">
-            {user?.role === 'agent' ? 'You will see available slots only. Other agents\' bookings are not visible.' : 'Select a date to see available slots based on vendor availability and buffer settings.'}
+            {user?.role === 'agent' ? 'You will see available slots only. Other agents\' bookings are not visible.' : 'Pick a property and date to see available slots based on vendor availability and buffer settings.'}
           </InfoBox>
           <div className="grid2">
-            <div className="field"><label>Date</label><input type="date" value={bookDate} onChange={e=>loadSlots(e.target.value)} min={new Date().toISOString().split('T')[0]} /></div>
+            <div className="field"><label>Property *</label>
+              <select value={bookProp||''} onChange={e=>pickBookProp(Number(e.target.value))}>
+                <option value="">— Select property —</option>
+                {properties.map(p=><option key={p.id} value={p.id}>{(p.reference||('#'+p.id))} · {p.city}</option>)}
+              </select>
+            </div>
+            <div className="field"><label>Date</label><input type="date" value={bookDate} onChange={e=>loadSlots(e.target.value)} min={new Date().toISOString().split('T')[0]} disabled={!bookProp} /></div>
           </div>
           {slots.length > 0 && (
             <div className="field">
@@ -770,7 +782,10 @@ function ViewingsView({ propId }) {
             </div>
           )}
           {slots.length === 0 && bookDate && <InfoBox type="amber">No available slots on this date — try another day.</InfoBox>}
-          <div className="field"><label>Buyer reference *</label><input value={buyerRef} onChange={e=>setBuyerRef(e.target.value)} placeholder="e.g. Large family — primary residence · cash buyer" /></div>
+          <div className="grid2">
+            <div className="field"><label>Buyer name *</label><input value={buyerName} onChange={e=>setBuyerName(e.target.value)} placeholder="e.g. Mr & Mrs Hargreaves" /></div>
+            <div className="field"><label>Buyer reference</label><input value={buyerRef} onChange={e=>setBuyerRef(e.target.value)} placeholder="e.g. Cash buyer · primary residence" /></div>
+          </div>
           <div className="field"><label style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>Notes for INHOUS <Dictate onText={t=>setBuyerNotes(v=>(v?v+' ':'')+t)} /></label><textarea value={buyerNotes} onChange={e=>setBuyerNotes(e.target.value)} placeholder="Any additional context about the buyer…" style={{minHeight:60}} /></div>
           {bookError && <div className="error-text" style={{marginBottom:10}}>{bookError}</div>}
           <div style={{display:'flex',gap:8}}>
@@ -793,7 +808,7 @@ function ViewingsView({ propId }) {
                     <td style={{fontWeight:500}}>{v.requested_date}<br/><span style={{color:'var(--mid)',fontSize:12}}>{v.requested_time}{v.slot_end_time?` – ${v.slot_end_time}`:''}</span></td>
                     <td>{v.agency_name}</td>
                     {user?.role==='broker'&&<td style={{fontSize:12}}>{v.negotiator_name}</td>}
-                    <td style={{fontSize:12,color:'var(--mid)'}}>{v.buyer_reference||'—'}</td>
+                    <td style={{fontSize:12,color:'var(--mid)'}}>{v.buyer_name||v.buyer_reference||'—'}</td>
                     <td><span className={`badge ${v.booking_mode==='instant'?'badge-green':'badge-blue'}`}>{v.booking_mode==='instant'?'Instant':'Confirm'}</span></td>
                     <td><Badge status={v.status} /></td>
                     {['broker','vendor'].includes(user?.role) && (
@@ -824,7 +839,7 @@ function ViewingsView({ propId }) {
                     <td style={{fontWeight:500,fontFamily:'monospace',fontSize:12}}>{v.property_reference||('#'+v.property_id)}<div style={{fontWeight:400,color:'var(--mid)'}}>{v.city}</div></td>
                     <td>{v.requested_date}<br/><span style={{color:'var(--mid)',fontSize:12}}>{v.requested_time}</span></td>
                     <td style={{fontSize:12}}>{v.agency_name||'—'}</td>
-                    <td style={{fontSize:12,color:'var(--mid)'}}>{v.buyer_reference||'—'}</td>
+                    <td style={{fontSize:12,color:'var(--mid)'}}>{v.buyer_name||v.buyer_reference||'—'}</td>
                     <td><Badge status={v.status} /></td>
                     {['broker','vendor'].includes(user?.role) && (
                       <td>{v.status==='pending' && (

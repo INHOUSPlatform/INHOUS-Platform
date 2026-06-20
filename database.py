@@ -237,6 +237,7 @@ def init_db():
         negotiator_name TEXT NOT NULL,
         negotiator_email TEXT,
         negotiator_phone TEXT,
+        buyer_name TEXT,
         buyer_reference TEXT,
         buyer_notes TEXT,
         requested_date DATE NOT NULL,
@@ -422,6 +423,7 @@ def init_db():
         'offers': [("inhous_fee", "TEXT"), ("offer_date", "TEXT")],
         'viewing_feedback': [("audio_path", "TEXT"), ("audio_filename", "TEXT")],
         'notifications': [("level", "TEXT DEFAULT 'info'")],
+        'viewing_requests': [("buyer_name", "TEXT")],
     }
     for table, cols in migrations.items():
         for col, ddl in cols:

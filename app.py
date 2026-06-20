@@ -560,7 +560,7 @@ def all_viewings():
     """All viewings across the properties this user can see (for the calendar)."""
     db = get_db()
     cols = '''vr.id, vr.property_id, vr.requested_date, vr.requested_time, vr.slot_end_time,
-              vr.status, vr.booking_mode, vr.agency_name, vr.buyer_reference,
+              vr.status, vr.booking_mode, vr.agency_name, vr.buyer_name, vr.buyer_reference,
               p.reference as property_reference, p.address_line1, p.city'''
     if g.role == 'broker':
         rows = db.execute(f'''SELECT {cols}, vr.negotiator_name FROM viewing_requests vr
@@ -586,7 +586,7 @@ def get_viewings(property_id):
         # Broker and vendor see all viewings — vendor sees agency name only (not negotiator name)
         viewings = rows_to_list(db.execute('''
             SELECT vr.id, vr.property_id, vr.requested_date, vr.requested_time,
-                   vr.slot_end_time, vr.booking_mode, vr.status, vr.buyer_reference,
+                   vr.slot_end_time, vr.booking_mode, vr.status, vr.buyer_name, vr.buyer_reference,
                    vr.created_at, vr.confirmed_at, vr.feedback_sent_at, vr.feedback_submitted_at,
                    vr.agency_name,
                    CASE WHEN ? = 'broker' THEN vr.negotiator_name ELSE NULL END as negotiator_name,
@@ -662,11 +662,11 @@ def book_viewing(property_id):
 
     c = db.execute('''INSERT INTO viewing_requests
         (property_id,requested_by,agency_name,negotiator_name,negotiator_email,
-         negotiator_phone,buyer_reference,buyer_notes,requested_date,requested_time,
+         negotiator_phone,buyer_name,buyer_reference,buyer_notes,requested_date,requested_time,
          slot_end_time,booking_mode,status,confirmed_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
         property_id, g.user_id, agency_name, negotiator_name, negotiator_email,
-        negotiator_phone, data.get('buyer_reference',''), data.get('buyer_notes',''),
+        negotiator_phone, data.get('buyer_name',''), data.get('buyer_reference',''), data.get('buyer_notes',''),
         requested_date, requested_time, slot_end, mode, status,
         datetime.datetime.utcnow().isoformat() if mode == 'instant' else None
     ))
